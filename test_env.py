@@ -1,43 +1,41 @@
-import os
 import asyncio
+import os
 from dotenv import load_dotenv
-from supabase import create_client, Client
 from google import genai
 from google.genai import types
+from supabase import Client, create_client
 
-# Load environment variables into memory
 load_dotenv()
 
 def test_supabase_connection() -> bool:
-    """Verifies connection to the Supabase PostgreSQL instance."""
+    """Verifies connectivity to the configured Supabase PostgreSQL instance."""
     url: str | None = os.environ.get("SUPABASE_URL")
     key: str | None = os.environ.get("SUPABASE_KEY")
     
     if not url or not key:
-        print("❌ Missing Supabase credentials in .env file.")
+        print("[Error] Missing Supabase credentials in environment.")
         return False
         
     try:
         supabase: Client = create_client(url, key)
-        print("✅ Supabase client initialized successfully.")
+        print("[Success] Supabase client initialized.")
         return True
     except Exception as e:
-        print(f"❌ Supabase connection failed: {e}")
+        print(f"[Error] Supabase connection failed: {e}")
         return False
 
 async def test_llm_connection() -> bool:
-    """Verifies the Gemini API key using the modern SDK and current model."""
+    """Validates API authentication and inference capabilities with the LLM provider."""
     api_key: str | None = os.environ.get("GEMINI_API_KEY")
     
     if not api_key:
-        print("❌ Missing GEMINI_API_KEY in .env file.")
+        print("[Error] Missing GEMINI_API_KEY in environment.")
         return False
 
     try:
-        print("⏳ Pinging Gemini...")
-        client = genai.Client(api_key = api_key)
+        print("Pinging LLM provider...")
+        client = genai.Client(api_key=api_key)
         
-        # Upgraded to the currently supported flash model
         response = await asyncio.to_thread(
             client.models.generate_content,
             model='gemini-2.5-flash',
@@ -48,25 +46,24 @@ async def test_llm_connection() -> bool:
             )
         )
         
-        result: str | None = response.text
-        clean_result = result.strip() if result else "No response"
-        print(f"✅ Gemini API connected successfully. Response: {clean_result}")
+        clean_result = response.text.strip() if response.text else "No response"            
+        print(f"[Success] LLM API connected. Response: {clean_result}")
         return True
     except Exception as e:
-        print(f"❌ Gemini connection failed: {e}")
+        print(f"[Error] LLM connection failed: {e}")
         return False
 
 async def main() -> None:
-    print("Starting Trust Agent environment check...\n")
+    print("Starting environment diagnostic check...\n")
     
     db_ok: bool = test_supabase_connection()
     llm_ok: bool = await test_llm_connection()
     
     print("\n--- Diagnostic Results ---")
     if db_ok and llm_ok:
-        print("🚀 All systems go. Sprint 0 plumbing is fully operational.")
+        print("[OK] Core infrastructure operational.")
     else:
-        print("⚠️ Environment check failed. Please resolve the errors above before continuing.")
+        print("[Warning] Environment check failed. Review logs above.")
 
 if __name__ == "__main__":
     asyncio.run(main())
