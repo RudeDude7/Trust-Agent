@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     document_id  UUID        NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     content      TEXT        NOT NULL,
-    embedding    VECTOR(768),          -- Gemini text-embedding-004 outputs 768-d vectors
+    embedding    VECTOR(384),          -- all-MiniLM-L6-v2 outputs 384-d vectors (free, local)
     metadata     JSONB       NOT NULL DEFAULT '{}',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
