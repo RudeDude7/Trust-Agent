@@ -97,7 +97,7 @@ def _classify_finding(title: str, snippet: str) -> str:
 # ---------------------------------------------------------------------------
 def _score_relevance(title: str, snippet: str, vendor: str) -> float:
     """
-    Scores 0.0–1.0 based on weighted risk keywords, negators, and proximity to the vendor name.
+    Scores 0.0 – 1.0 based on weighted risk keywords, negators, and proximity to the vendor name.
     Higher scores mean the finding is more directly relevant to security/compliance risk.
     """
     text: str = (title + " " + snippet).lower()
