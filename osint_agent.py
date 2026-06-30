@@ -13,6 +13,7 @@ Zero-cost: DuckDuckGo requires no API key and no paid subscription.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from ddgs import DDGS
@@ -56,14 +57,37 @@ def _classify_finding(title: str, snippet: str) -> str:
     """
     text: str = (title + " " + snippet).lower()
 
-    if any(w in text for w in ("breach", "hack", "leak", "compromised", "ransomware")):
+    # 1. Cybersecurity & Data Integrity
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("breach", "hack", "leak", "compromised", "ransomware", "unauthorized access", "exfiltration", "zero-day", "cyberattack", "data spill", "credential stuffing")): 
         return "breach_report"
-    if any(w in text for w in ("fine", "penalty", "gdpr", "ftc", "settlement", "regulatory")):
+    
+    # 2. Regulatory & Compliance
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("penalty", "gdpr", "ftc", "settlement", "regulatory", "sec probe", "investigation", "doj", "non-compliance", "subpoena", "consent decree", "cfpb", "fca violation")): 
         return "regulatory_filing"
-    if any(w in text for w in ("lawsuit", "sued", "litigation", "court")):
+    
+    # 3. Legal & Judicial
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("lawsuit", "sued", "litigation", "court", "class action", "plaintiff", "indictment", "injunction", "class-action", "ip theft", "patent infringement")): 
         return "legal_action"
-    if any(w in text for w in ("privacy", "tracking", "surveillance", "data collection")):
+    
+    # 4. Privacy & Surveillance
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("privacy", "tracking", "surveillance", "data collection", "unconsented", "selling data", "cookie tracking", "wiretap", "biometric", "ccpa violation")): 
         return "privacy_concern"
+
+    # 5. Financial & Corporate Stability (NEW)
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("bankruptcy", "chapter 11", "insolvent", "liquidation", "default", "restructuring", "layoffs", "downsizing", "going concern", "credit downgrade", "missed debt")): 
+        return "financial_instability"
+
+    # 6. Operational Resilience (NEW)
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("outage", "downtime", "service disruption", "offline", "sla breach", "incident report", "degraded performance", "blackout", "network failure")): 
+        return "operational_outage"
+
+    # 7. ESG & Unethical Practices (NEW)
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("child labor", "human rights", "environmental violation", "fraud", "embezzlement", "bribe", "corruption", "greenwashing", "toxic workplace", "money laundering", "fcpa")): 
+        return "esg_unethical_practices"
+
+    # 8. Geopolitical & State-Sponsored Risks (NEW)
+    if any(re.search(rf"\b{re.escape(w)}\b", text) for w in ("state-sponsored", "apt", "sanctions", "ofac", "embargo", "espionage", "nation-state", "foreign adversary", "export control", "ccp ties", "banned entity")): 
+        return "state_sponsored_ties"
 
     return "news_article"
 
@@ -93,7 +117,7 @@ def _score_relevance(title: str, snippet: str, vendor: str) -> float:
         score += 0.3
 
     # Count risk keyword hits (diminishing returns).
-    hits: int = sum(1 for kw in risk_keywords if kw in text)
+    hits: int = sum(1 for kw in risk_keywords if re.search(rf"\b{re.escape(kw)}\b", text))
     score += min(hits * 0.1, 0.7)  # cap keyword contribution at 0.7
 
     return round(min(score, 1.0), 2)
