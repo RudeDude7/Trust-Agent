@@ -97,30 +97,63 @@ def _classify_finding(title: str, snippet: str) -> str:
 # ---------------------------------------------------------------------------
 def _score_relevance(title: str, snippet: str, vendor: str) -> float:
     """
-    Scores 0.0–1.0 based on how many risk-related keywords appear.
-    Higher scores mean the finding is more directly relevant to
-    security/compliance risk.
+    Scores 0.0–1.0 based on weighted risk keywords, negators, and proximity to the vendor name.
+    Higher scores mean the finding is more directly relevant to security/compliance risk.
     """
     text: str = (title + " " + snippet).lower()
     vendor_lower: str = vendor.lower()
-
-    risk_keywords: list[str] = [
-        "breach", "hack", "fine", "penalty", "gdpr", "privacy",
-        "security", "vulnerability", "incident", "compliance",
-        "lawsuit", "leak", "ransomware", "ban", "investigation",
-    ]
+    
+    # 1. Weighted Keyword Tiers
+    HIGH_RISK = ["breach", "hack", "ransomware", "indicted", "sanctioned", "fraud", "embezzlement"]
+    MED_RISK = ["fine", "penalty", "lawsuit", "investigation", "leak", "vulnerability", "subpoena"]
+    LOW_RISK = ["gdpr", "privacy", "security", "incident", "compliance", "audit"]
+    
+    # 2. Negation/Mitigation Keywords
+    NEGATORS = ["prevented", "awarded", "mitigated", "defended", "cleared", "dismissed", "protected", "blocks", "stops", "false"]
 
     score: float = 0.0
-
-    # Vendor name mentioned → strong signal.
-    if vendor_lower in text:
+    
+    # Find all vendor occurrences to calculate proximity
+    vendor_matches = list(re.finditer(rf"\b{re.escape(vendor_lower)}\b", text))
+    if not vendor_matches:
+        vendor_matches = list(re.finditer(re.escape(vendor_lower), text))
+        
+    # Base Vendor Match
+    if vendor_matches:
         score += 0.3
-
-    # Count risk keyword hits (diminishing returns).
-    hits: int = sum(1 for kw in risk_keywords if re.search(rf"\b{re.escape(kw)}\b", text))
-    score += min(hits * 0.1, 0.7)  # cap keyword contribution at 0.7
-
-    return round(min(score, 1.0), 2)
+        
+    # 3. Sliding Window Analysis
+    for category, weight in [(HIGH_RISK, 0.3), (MED_RISK, 0.15), (LOW_RISK, 0.05)]:
+        for kw in category:
+            for match in re.finditer(rf"\b{re.escape(kw)}\b", text):
+                kw_idx: int = match.start()
+                
+                # Create an 80-character window (~10 words) around the risk keyword
+                start_window = max(0, kw_idx - 40)
+                end_window = min(len(text), kw_idx + len(kw) + 40)
+                context_window = text[start_window:end_window]
+                
+                # False Positive Reduction: Are there mitigating words nearby?
+                is_negated = any(re.search(rf"\b{re.escape(neg)}\b", context_window) for neg in NEGATORS)
+                
+                if is_negated:
+                    # Penalize the score slightly for false alarms (e.g., "attack prevented")
+                    score -= (weight * 0.5) 
+                else:
+                    # Proximity Bonus: Is the vendor name right next to the risk word?
+                    actual_weight = weight
+                    vendor_in_window = any(
+                        (start_window <= v_match.start() <= end_window) 
+                        for v_match in vendor_matches
+                    )
+                    
+                    if vendor_in_window:
+                        actual_weight *= 1.5 # 50% boost if they share the same context window
+                        
+                    score += actual_weight
+                    
+    # Cap the final score strictly between 0.0 and 1.0
+    return round(max(0.0, min(score, 1.0)), 2)
 
 
 # ---------------------------------------------------------------------------
