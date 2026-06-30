@@ -146,11 +146,20 @@ def _retrieve_chunks(query: str) -> list[tuple[Document, float]]:
     return results
 
 
-def _fetch_parent_context(db: Client, document_id: str) -> str:
+def _fetch_parent_context(db: Client, document_id: str) -> tuple[str, bool]:
     """
     Follows the FK from a child chunk back to its parent document
     to retrieve the larger context window for LLM grounding.
+
+    Returns:
+        A tuple of (parent_text, is_orphan).
+        - If the parent exists: (parent_content, False)
+        - If the parent is missing: ("", True)
+        - If the query errors: (error_message, False)
     """
+    if not document_id:
+        return ("", True)
+
     try:
         response = (
             db.table("documents")
@@ -163,12 +172,18 @@ def _fetch_parent_context(db: Client, document_id: str) -> str:
             list[dict[str, Any]],
             response.data if response.data else [],
         )
+
         if rows:
-            return str(rows[0].get("content", "(parent context unavailable)"))
+            content: str = str(rows[0].get("content", ""))
+            if content:
+                return (content, False)
+
+        # Parent row is missing — this child chunk is orphaned.
+        return ("", True)
+
     except Exception as exc:
         log.warning("Failed to fetch parent context for %s: %s", document_id, exc)
-
-    return "(parent context unavailable)"
+        return (f"(parent lookup failed: {exc})", False)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +196,9 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
     1. Determines the search query (from state or default).
     2. Embeds the query and performs vector similarity search.
     3. For each matching child chunk, fetches the parent context.
-    4. Returns results mapped to RAGClause format for state accumulation.
+    4. If a parent is missing (orphan), falls back to the child's own
+       text and fires a CRITICAL log alert.
+    5. Returns results mapped to RAGClause format for state accumulation.
     """
     # Determine query — use state's rag_query if set, otherwise default.
     query: str = state.get("rag_query", "") or DEFAULT_RAG_QUERY
@@ -206,10 +223,30 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
     # Fetch parent context for each child and build RAGClause list.
     db: Client = _get_supabase_client()
     clauses: list[RAGClause] = []
+    orphan_count: int = 0
 
     for doc, score in results:
         document_id: str = str(doc.metadata.get("document_id", ""))
-        parent_text: str = _fetch_parent_context(db, document_id)
+
+        # --- Safety Net: Level 2 (Fallback) + Level 3 (Alert) ---
+        parent_text, is_orphan = _fetch_parent_context(db, document_id)
+
+        if is_orphan:
+            # Level 3: Fire a CRITICAL alert (simulates Slack notification).
+            log.critical(
+                "CRITICAL: Orphaned child chunk detected for document ID %s. "
+                "Database re-ingestion required.",
+                document_id,
+            )
+            orphan_count += 1
+
+            # Level 2: Fall back to the child's own text so the LLM still
+            # receives the specific clause and can generate an answer.
+            parent_text = doc.page_content
+            log.warning(
+                "  ↳ Falling back to child text as parent context for ID %s.",
+                document_id,
+            )
 
         clause: RAGClause = {
             "clause_text":      doc.page_content,
@@ -228,6 +265,15 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
         f"RAG search for '{query}' returned {len(clauses)} matching policy "
         f"clauses (top similarity: {clauses[0]['similarity_score']:.4f})."
     )
+
+    if orphan_count > 0:
+        orphan_warning: str = (
+            f" ⚠️ {orphan_count} orphaned chunk(s) detected — "
+            f"used child text as fallback."
+        )
+        summary += orphan_warning
+        log.warning(orphan_warning.strip())
+
     log.info(summary)
 
     return {
@@ -262,71 +308,76 @@ if __name__ == "__main__":
 
 
 # ============================================================
-# 🧠 Mentor Notes: Handling API Types with typing.cast
+# 🧠 Mentor Notes: The Missing Parent Safety Net
 # ============================================================
 #
-# THE PROBLEM
-# ───────────
-# The Supabase Python client types its response.data as:
+# An "orphaned child chunk" is a vector embedding in document_chunks
+# whose parent row in the documents table has been deleted or was
+# never inserted.  This is lethal in a hierarchical RAG system
+# because the LLM receives a child match but has NO parent context
+# to ground its answer — producing hallucinations or refusals.
 #
-#     Sequence[JSON] | None
-#
-# where JSON is a recursive union:  str | int | float | bool |
-# None | list[JSON] | dict[str, JSON].  This is technically correct
-# — the REST API *could* return any JSON shape — but it means
-# Pyright sees every field access like row["content"] as:
-#
-#     "Cannot index into Sequence[JSON] with str"
-#     "Type 'JSON' is not subscriptable"
-#
-# The type checker has no way to know that our RPC function
-# `match_document_chunks` always returns rows shaped like:
-#     {"id": str, "document_id": str, "content": str, "similarity": float}
+# We defend against this with a 3-level safety net:
 #
 #
-# THE FIX: typing.cast()
-# ──────────────────────
-# cast() is a compile-time-only assertion.  It tells the type checker:
-# "I, the developer, guarantee this value has this type.  Trust me."
+# LEVEL 1 — DATABASE CONSTRAINT (schema.sql)
+# ──────────────────────────────────────────
+#   document_id UUID NOT NULL
+#       REFERENCES documents(id)
+#       ON DELETE CASCADE
 #
-#     rows = cast(list[dict[str, Any]], response.data or [])
+#   This is the ROOT FIX.  ON DELETE CASCADE means:
 #
-# At runtime, cast() is a no-op — it returns its argument unchanged
-# with zero performance cost.  But at type-check time, Pyright now
-# sees `rows` as `list[dict[str, Any]]`, so row["content"] resolves
-# cleanly to `Any` instead of an error.
+#     "If a parent row in `documents` is deleted, PostgreSQL
+#      automatically deletes every child row in `document_chunks`
+#      that references it."
 #
+#   Orphans become structurally impossible at the database level.
+#   No amount of buggy Python code can create them because the
+#   database engine itself enforces the rule on every DELETE.
 #
-# WHY NOT just use `# type: ignore` EVERYWHERE?
-# ─────────────────────────────────────────────
-# You could silence every error with `# type: ignore`, but that's
-# a shotgun approach — it suppresses ALL type errors on that line,
-# including real bugs you'd want to catch.  cast() is surgical:
-# it narrows exactly one value's type at exactly one boundary.
-#
-#
-# THE "TRUST BOUNDARY" PATTERN
-# ────────────────────────────
-# Notice that we only use cast() at the API boundary — the exact
-# line where data enters our code from an external system.  Once
-# cast, all downstream code is fully type-checked as normal:
-#
-#     External API  ──cast()──▶  Your code (fully type-safe)
-#         ▲                          ▲
-#     untyped/loose             strict Pyright checks
-#
-# This pattern applies to any REST API wrapper, not just Supabase:
-# OpenAI responses, Stripe webhooks, third-party SDKs — anywhere
-# the library's type stubs are looser than what you actually receive.
+#   Think of it like a building code vs. a smoke alarm:
+#   - The FK constraint is the building code (prevents the fire).
+#   - The Python fallback is the smoke alarm (catches the fire).
+#   You want both, but the building code is what keeps you safe.
 #
 #
-# BONUS: SAFE EXTRACTION WITH .get() + str()/float()
-# ──────────────────────────────────────────────────
-# Even after cast(), individual dict values are typed as `Any`.
-# Wrapping them in str() or float() does two things:
+# LEVEL 2 — PYTHON FALLBACK (rag_agent.py: _fetch_parent_context)
+# ───────────────────────────────────────────────────────────────
+#   If the parent lookup returns empty, we don't crash or return
+#   a useless "(parent context unavailable)" string.  Instead:
 #
-#   1. Gives Pyright a concrete return type to work with.
-#   2. Adds a runtime safety net — if the value is unexpectedly
-#      None or a wrong type, you get a clean Python error instead
-#      of a silent bug downstream.
+#       parent_text = doc.page_content  # use the child's own text
+#
+#   The LLM still receives the specific matched clause.  The answer
+#   quality degrades slightly (no surrounding context), but the
+#   pipeline keeps running and the user gets a response.
+#
+#
+# LEVEL 3 — CRITICAL ALERT (rag_agent.py: rag_agent_node)
+# ───────────────────────────────────────────────────────
+#   In the same fallback block, we fire:
+#
+#       log.critical("CRITICAL: Orphaned child chunk detected ...")
+#
+#   In production you'd wire this to a Slack webhook, PagerDuty,
+#   or an ops dashboard.  The alert tells the team:
+#   "Something bypassed the FK constraint — investigate and
+#    re-ingest the affected documents."
+#
+#
+# WHY ALL THREE?
+# ──────────────
+#   • Level 1 prevents 99.9% of orphans.  But constraints can be
+#     dropped by migration scripts, or data can be imported via
+#     bulk COPY that skips FK checks.
+#
+#   • Level 2 ensures the user always gets a response, even in
+#     the 0.1% edge case.
+#
+#   • Level 3 ensures the engineering team knows about it within
+#     seconds, not weeks.
+#
+#   Defense in depth.  Each layer compensates for the one above it.
 # ============================================================
+

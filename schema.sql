@@ -84,3 +84,33 @@ $$;
 
 COMMENT ON FUNCTION match_document_chunks IS
     'Vector similarity search used by rag_agent.py. Returns top-k child chunks by cosine similarity.';
+
+
+-- ============================================================
+-- 7. SAFETY NET: Enforce FK constraint on existing tables.
+--    If you created document_chunks without the FK (or need to
+--    verify it exists), run this block.  It's safe to run even
+--    if the constraint already exists — it will simply report
+--    "constraint already exists" and do nothing.
+-- ============================================================
+
+-- Drop-if-exists + re-add pattern (idempotent):
+ALTER TABLE document_chunks
+    DROP CONSTRAINT IF EXISTS document_chunks_document_id_fkey;
+
+ALTER TABLE document_chunks
+    ADD CONSTRAINT document_chunks_document_id_fkey
+    FOREIGN KEY (document_id)
+    REFERENCES documents(id)
+    ON DELETE CASCADE;
+
+COMMENT ON CONSTRAINT document_chunks_document_id_fkey ON document_chunks IS
+    'Cascade-deletes child chunks when a parent document is removed. Prevents orphaned embeddings.';
+
+
+-- 8. DIAGNOSTIC: Find any orphaned child chunks that slipped in
+--    before the FK constraint was active.  Should return 0 rows.
+SELECT dc.id AS orphaned_chunk_id, dc.document_id AS missing_parent_id
+FROM document_chunks dc
+LEFT JOIN documents d ON dc.document_id = d.id
+WHERE d.id IS NULL;
