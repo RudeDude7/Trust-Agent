@@ -11,6 +11,7 @@ Usage:
 """
 
 import logging
+from typing import Any, cast
 
 from langgraph.graph import StateGraph, START, END
 from state import VendorDueDiligenceState
@@ -94,7 +95,7 @@ def mock_judge_node(state: VendorDueDiligenceState) -> dict:
 # ---------------------------------------------------------------------------
 # Graph construction
 # ---------------------------------------------------------------------------
-workflow = StateGraph(VendorDueDiligenceState)
+workflow = StateGraph(VendorDueDiligenceState)  # type: ignore[arg-type]
 
 workflow.add_node("osint_agent", mock_osint_node)
 workflow.add_node("rag_agent_1", mock_rag_node_part_one)
@@ -114,18 +115,21 @@ app = workflow.compile()
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    initial_input: dict = {
+    initial_input: dict[str, Any] = {
         "vendor_name": "TikTok",
         "vendor_url": "https://tiktok.com",
     }
 
     log.info("Invoking graph with vendor: %s", initial_input["vendor_name"])
-    final_state: dict = app.invoke(initial_input)
+    final_state: dict[str, Any] = cast(
+        dict[str, Any],
+        app.invoke(cast(VendorDueDiligenceState, initial_input)),
+    )
 
     # --- Validation report ---
     osint_count: int = len(final_state.get("osint_findings", []))
     rag_count: int = len(final_state.get("rag_clauses", []))
-    risk_level: str = final_state.get("risk_assessment", {}).get("overall_risk_level", "N/A")
+    risk_level: str = str(final_state.get("risk_assessment", {}).get("overall_risk_level", "N/A"))
 
     print("\n" + "=" * 56)
     print("       GRAPH VERIFICATION METRICS")

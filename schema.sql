@@ -50,3 +50,37 @@ CREATE INDEX IF NOT EXISTS idx_chunks_embedding
 -- 5. B-tree index on the foreign key for fast parent lookups after retrieval.
 CREATE INDEX IF NOT EXISTS idx_chunks_document_id
     ON document_chunks (document_id);
+
+
+-- 6. RPC function for vector similarity search.
+--    Called by rag_agent.py via: db.rpc("match_document_chunks", {...})
+--    Computes cosine similarity in PostgreSQL and returns the top-k matches.
+CREATE OR REPLACE FUNCTION match_document_chunks(
+    query_embedding  VECTOR(384),
+    match_count      INT DEFAULT 3,
+    match_threshold  FLOAT DEFAULT 0.0
+)
+RETURNS TABLE (
+    id            UUID,
+    document_id   UUID,
+    content       TEXT,
+    metadata      JSONB,
+    similarity    FLOAT
+)
+LANGUAGE sql STABLE
+AS $$
+    SELECT
+        dc.id,
+        dc.document_id,
+        dc.content,
+        dc.metadata,
+        1 - (dc.embedding <=> query_embedding) AS similarity
+    FROM document_chunks dc
+    WHERE dc.embedding IS NOT NULL
+      AND 1 - (dc.embedding <=> query_embedding) >= match_threshold
+    ORDER BY dc.embedding <=> query_embedding
+    LIMIT match_count;
+$$;
+
+COMMENT ON FUNCTION match_document_chunks IS
+    'Vector similarity search used by rag_agent.py. Returns top-k child chunks by cosine similarity.';
