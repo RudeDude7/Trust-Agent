@@ -16,7 +16,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -63,6 +64,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    """Verifies the Supabase JWT token and extracts the user_id."""
+    token = credentials.credentials
+    db = get_supabase_client()
+    try:
+        res = db.auth.get_user(token)
+        if not res or not res.user:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        return res.user.id
+    except Exception as e:
+        log.error("Authentication failed: %s", e)
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
 # ---------------------------------------------------------------------------
 # Startup: Compile the graph and warm up heavy models once
 # ---------------------------------------------------------------------------
@@ -86,30 +102,35 @@ class AnalyzeRequest(BaseModel):
 # ENDPOINT 1: Run the full due diligence pipeline
 # ═══════════════════════════════════════════════════════════════════════════
 @app.post("/analyze")
-async def analyze_vendor(request: AnalyzeRequest):
+async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_current_user)):
     """
-    Triggers the LangGraph pipeline to perform due diligence on a vendor.
+    Triggers the LangGraph pipeline to perform due diligence on a vendor,
+    then saves the initial risk_assessment to the audits table.
     """
-    log.info(f"Received analysis request for vendor: {request.vendor_name}")
+    log.info(f"Received analysis request for vendor: {request.vendor_name} by user {user_id}")
 
     try:
-        # Construct the initial state
         initial_state: VendorDueDiligenceState = {  # type: ignore[typeddict-item]
             "vendor_name": request.vendor_name,
             "vendor_url": request.vendor_url or "",
         }
 
-        # Invoke the graph synchronously (since our agents use synchronous LangChain calls right now)
-        # In a high-traffic production system, we would convert the node functions to async.
         final_state = graph_app.invoke(initial_state)
-
-        # Extract the final assessment
         assessment = final_state.get("risk_assessment")
         if not assessment:
             raise HTTPException(status_code=500, detail="Pipeline completed but no risk assessment was generated.")
 
         session_id = str(uuid.uuid4())
-        # We no longer cache the final_state in memory to keep the API stateless
+        
+        # Save to Supabase
+        db = get_supabase_client()
+        db.table("audits").insert({
+            "session_id": session_id,
+            "user_id": user_id,
+            "vendor_name": request.vendor_name,
+            "risk_assessment": assessment,
+            "chat_history": []
+        }).execute()
 
         return {
             "status": "success",
@@ -233,30 +254,64 @@ async def health_check():
 from chat_agent import ChatAgent
 chat_agent_instance = ChatAgent()
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 4: Chat with the analysis results
-# ═══════════════════════════════════════════════════════════════════════════
+@app.get("/audits")
+async def get_audits(user_id: str = Depends(get_current_user)):
+    """Fetches all past audits for the authenticated user from Supabase."""
+    db = get_supabase_client()
+    try:
+        res = db.table("audits").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return {"status": "success", "audits": res.data}
+    except Exception as e:
+        log.error(f"Error fetching audits: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class ChatRequest(BaseModel):
-    vendor_name: str
-    context: str
-    history: list[dict[str, str]]
+    session_id: str
     message: str
 
 @app.post("/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, user_id: str = Depends(get_current_user)):
     """
-    Conversational endpoint to ask follow-up questions about the analysis.
-    This endpoint is now purely STATELESS. The context and history are
-    passed directly from the client.
+    Conversational endpoint to ask follow-up questions about an analysis.
+    Fetches context and history from Supabase, calls the agent, and appends the response.
     """
     try:
+        db = get_supabase_client()
+        
+        # Verify ownership and fetch data
+        res = db.table("audits").select("*").eq("session_id", request.session_id).eq("user_id", user_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Audit session not found")
+        
+        audit_data = res.data[0]
+        vendor_name = audit_data["vendor_name"]
+        
+        # Format context for the LLM
+        risk = audit_data["risk_assessment"]
+        context_str = f"OSINT Reconnaissance:\n{chr(10).join(risk.get('osint_inferences', []))}\n\nRAG Policy Discrepancies:\n{chr(10).join(risk.get('rag_inferences', []))}\n\nComparative Analysis:\n{risk.get('comparative_analysis', '')}"
+        
+        history = audit_data["chat_history"]
+        
+        # Call the ChatAgent
         response_text = chat_agent_instance.invoke(
-            vendor_name=request.vendor_name,
-            context=request.context,
-            history=request.history,
+            vendor_name=vendor_name,
+            context=context_str,
+            history=history,
             user_msg=request.message
         )
+        
+        # Update database with new history
+        new_history = history + [
+            {"role": "user", "content": request.message},
+            {"role": "agent", "content": response_text}
+        ]
+        
+        db.table("audits").update({"chat_history": new_history}).eq("session_id", request.session_id).execute()
+        
         return {"status": "success", "response": response_text}
+    except HTTPException:
+        raise
     except Exception as e:
         log.error("Chat endpoint failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
