@@ -5,8 +5,10 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import type { AnalysisResponse } from '../types';
+
 interface ChatProps {
-  sessionId: string;
+  activeData: AnalysisResponse;
 }
 
 interface Message {
@@ -14,7 +16,7 @@ interface Message {
   content: string;
 }
 
-export const Chat: React.FC<ChatProps> = ({ sessionId }) => {
+export const Chat: React.FC<ChatProps> = ({ activeData }) => {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'agent', content: 'Agent connected. Analysis context loaded. What would you like to know about this vendor?' }
   ]);
@@ -43,7 +45,13 @@ export const Chat: React.FC<ChatProps> = ({ sessionId }) => {
     setIsLoading(true);
 
     try {
-      const res = await sendChatMessage(sessionId, userMsg);
+      // Exclude the very first static agent greeting from history, or include it if desired. 
+      // We will include it to maintain context of what the agent said first.
+      const historyPayload = messages.map(m => ({ role: m.role, content: m.content }));
+      
+      const contextStr = `OSINT Reconnaissance:\n${activeData.risk_assessment.osint_inferences.join('\n')}\n\nRAG Policy Discrepancies:\n${activeData.risk_assessment.rag_inferences.join('\n')}\n\nComparative Analysis:\n${activeData.risk_assessment.comparative_analysis}`;
+
+      const res = await sendChatMessage(activeData.vendor, contextStr, historyPayload, userMsg);
       setMessages(prev => [...prev, { role: 'agent', content: res.response }]);
     } catch (err: any) {
       setMessages(prev => [...prev, { role: 'agent', content: `**[ERROR]:** ${err.message}` }]);

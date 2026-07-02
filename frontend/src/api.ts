@@ -33,17 +33,22 @@ export const analyzeVendor = async (vendorName: string, vendorUrl?: string): Pro
   return res.json();
 };
 
-export const sendChatMessage = async (sessionId: string, message: string): Promise<ChatResponse> => {
+export const sendChatMessage = async (
+  vendorName: string,
+  context: string,
+  history: { role: string; content: string }[],
+  message: string
+): Promise<ChatResponse> => {
   const res = await fetch(`${API_BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId, message }),
+    body: JSON.stringify({ vendor_name: vendorName, context, history, message }),
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error.detail || `Chat failed with status ${res.status}`);
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.detail || `API error: ${res.status}`);
   }
-
+  
   return res.json();
 };

@@ -27,8 +27,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from main import build_graph
 from state import VendorDueDiligenceState
 
-# Global session cache for stateless API chat follow-ups
-sessions: dict[str, VendorDueDiligenceState] = {}
+# Global session cache removed for stateless API chat follow-ups
 
 # Reuse the battle-tested ingestion functions from ingest.py
 from ingest import (
@@ -110,7 +109,7 @@ async def analyze_vendor(request: AnalyzeRequest):
             raise HTTPException(status_code=500, detail="Pipeline completed but no risk assessment was generated.")
 
         session_id = str(uuid.uuid4())
-        sessions[session_id] = final_state # type: ignore
+        # We no longer cache the final_state in memory to keep the API stateless
 
         return {
             "status": "success",
@@ -230,53 +229,38 @@ async def health_check():
     return {"status": "healthy"}
 
 
+# Global Chat Agent
+from chat_agent import ChatAgent
+chat_agent_instance = ChatAgent()
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ENDPOINT 4: Chat with the analysis results
 # ═══════════════════════════════════════════════════════════════════════════
 class ChatRequest(BaseModel):
-    session_id: str
+    vendor_name: str
+    context: str
+    history: list[dict[str, str]]
     message: str
 
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     """
     Conversational endpoint to ask follow-up questions about the analysis.
-    Uses the session_id to retrieve the cached graph state.
+    This endpoint is now purely STATELESS. The context and history are
+    passed directly from the client.
     """
-    state = sessions.get(request.session_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Session not found or expired.")
-        
-    vendor_name = state.get("vendor_name", "unknown")
-    rag_clauses = state.get("rag_clauses", [])
-    osint_findings = state.get("osint_findings", [])
-    
-    # Construct context
-    context_text = f"Vendor: {vendor_name}\n\nRAG Clauses:\n"
-    for clause in rag_clauses:
-        context_text += f"- (Role: {clause.get('role', 'unknown')}) {clause.get('clause_text')}\n"
-    
-    context_text += "\nOSINT Findings:\n"
-    for finding in osint_findings:
-        context_text += f"- [{finding.get('finding_type')}] {finding.get('title')}: {finding.get('snippet')}\n"
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an AI assistant helping a user analyze a vendor due diligence report. "
-                   "Answer the user's question using ONLY the provided context from the RAG and OSINT pipeline. "
-                   "If the context does not contain the answer, say you do not know based on the current data.\n\n"
-                   "=== CONTEXT ===\n{context}"),
-        ("user", "{message}")
-    ])
-    
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0)
-    chain = prompt | llm
-    
     try:
-        response = chain.invoke({"context": context_text, "message": request.message})
-        return {"status": "success", "response": response.content}
+        response_text = chat_agent_instance.invoke(
+            vendor_name=request.vendor_name,
+            context=request.context,
+            history=request.history,
+            user_msg=request.message
+        )
+        return {"status": "success", "response": response_text}
     except Exception as e:
         log.error("Chat endpoint failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ============================================================

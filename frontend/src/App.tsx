@@ -77,7 +77,7 @@ function App() {
           ) : (
             <div className="h-full relative">
               <Results data={activeData} />
-              <Chat sessionId={activeData.session_id} />
+              <Chat key={activeData.session_id} activeData={activeData} />
             </div>
           )}
         </div>
