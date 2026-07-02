@@ -26,10 +26,10 @@ def test_supabase_connection() -> bool:
 
 async def test_llm_connection() -> bool:
     """Validates API authentication and inference capabilities with the LLM provider."""
-    api_key: str | None = os.environ.get("GEMINI_API_KEY")
+    api_key: str | None = os.environ.get("GOOGLE_API_KEY")
     
     if not api_key:
-        print("[Error] Missing GEMINI_API_KEY in environment.")
+        print("[Error] Missing GOOGLE_API_KEY in environment.")
         return False
 
     try:
