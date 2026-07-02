@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from main import build_graph
@@ -23,6 +24,15 @@ app = FastAPI(
     title="Trust Agent - Vendor Due Diligence API",
     description="API for running automated vendor due diligence using LangGraph.",
     version="1.0.0"
+)
+
+# Enable CORS so frontend apps (localhost, Firebase, etc.) can call the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Tighten this in production to specific domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Build the graph once at startup so we don't rebuild it on every request
