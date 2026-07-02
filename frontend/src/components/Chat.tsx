@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage } from '../api';
-import { Terminal, Send, Loader2, MessageSquare } from 'lucide-react';
+import { Terminal, Send, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatProps {
   sessionId: string;
@@ -21,11 +23,16 @@ export const Chat: React.FC<ChatProps> = ({ sessionId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isOpen]);
+  };
+
+  useEffect(() => {
+    // Small delay ensures DOM paints the new message before scrolling
+    setTimeout(scrollToBottom, 50);
+  }, [messages, isOpen, isLoading]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -39,7 +46,7 @@ export const Chat: React.FC<ChatProps> = ({ sessionId }) => {
       const res = await sendChatMessage(sessionId, userMsg);
       setMessages(prev => [...prev, { role: 'agent', content: res.response }]);
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'agent', content: `[ERROR]: ${err.message}` }]);
+      setMessages(prev => [...prev, { role: 'agent', content: `**[ERROR]:** ${err.message}` }]);
     } finally {
       setIsLoading(false);
     }
@@ -71,27 +78,46 @@ export const Chat: React.FC<ChatProps> = ({ sessionId }) => {
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
         {messages.map((msg, idx) => (
           <div key={idx} className={clsx("flex flex-col max-w-[85%]", msg.role === 'user' ? "ml-auto" : "mr-auto")}>
             <span className={clsx("text-[10px] font-mono mb-1 tracking-widest uppercase", msg.role === 'user' ? "text-slate-500 text-right" : "text-cyan-500/50")}>
               {msg.role}
             </span>
             <div className={clsx(
-              "p-3 rounded-xl text-sm leading-relaxed whitespace-pre-wrap font-mono",
+              "p-3 rounded-xl text-sm leading-relaxed font-sans",
               msg.role === 'user' 
-                ? "bg-slate-800 text-slate-200 border border-slate-700/50 rounded-br-none" 
-                : "bg-cyan-900/20 text-cyan-50 border border-cyan-800/30 rounded-bl-none"
+                ? "bg-cyan-700 text-white border border-cyan-600 rounded-br-none ml-auto text-right" 
+                : "bg-slate-800 text-slate-200 border border-slate-700/50 rounded-bl-none shadow-sm"
             )}>
-              {msg.content}
+              {msg.role === 'agent' ? (
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                    ul: ({node, ...props}) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
+                    ol: ({node, ...props}) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
+                    strong: ({node, ...props}) => <strong className="font-semibold text-cyan-300" {...props} />,
+                    a: ({node, ...props}) => <a className="text-cyan-400 hover:underline" {...props} />
+                  }}
+                >
+                  {msg.content}
+                </ReactMarkdown>
+              ) : (
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+              )}
             </div>
           </div>
         ))}
         {isLoading && (
           <div className="flex flex-col max-w-[85%] mr-auto">
-             <span className="text-[10px] font-mono mb-1 tracking-widest uppercase text-cyan-500/50">agent</span>
-             <div className="p-3 bg-cyan-900/20 text-cyan-400 border border-cyan-800/30 rounded-xl rounded-bl-none flex items-center gap-2">
-                <Loader2 className="animate-spin" size={16} /> processing...
+             <span className="text-[10px] font-mono mb-1 tracking-widest uppercase text-cyan-500/50">agent is typing...</span>
+             <div className="p-4 bg-slate-800 border border-slate-700/50 rounded-xl rounded-bl-none flex items-center shadow-sm w-fit">
+                <div className="flex space-x-1.5 items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
              </div>
           </div>
         )}
@@ -103,18 +129,19 @@ export const Chat: React.FC<ChatProps> = ({ sessionId }) => {
           <input
             type="text"
             value={input}
+            disabled={isLoading}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Query analysis data..."
-            className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
+            placeholder={isLoading ? "Agent is typing..." : "Query analysis data..."}
+            className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
             autoFocus
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors disabled:opacity-50"
+            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
-            <Send size={18} />
+            <Send size={18} className={clsx(isLoading ? "opacity-50" : "")} />
           </button>
         </div>
       </div>
