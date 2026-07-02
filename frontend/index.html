@@ -4,7 +4,7 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>VIGILANCE_OS | Vendor Due Diligence</title>
-    <meta name="description" content="AI-powered Vendor Due Diligence platform combining OSINT, RAG policy analysis, and LLM risk assessment."/>
+    <meta name="description" content="AI-powered Vendor Due Diligence platform — OSINT, RAG policy analysis, and LLM risk assessment."/>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -14,11 +14,8 @@
             --surface-accent: rgba(255, 255, 255, 0.05);
             --electric-cyan: #4cd6ff;
         }
-        body {
-            background-color: #090e11;
-            color: #dde3e7;
-            -webkit-font-smoothing: antialiased;
-        }
+        body { background-color: #090e11; color: #dde3e7; -webkit-font-smoothing: antialiased; }
+
         .glass-card {
             background: linear-gradient(135deg, rgba(26, 33, 35, 0.4) 0%, rgba(14, 20, 23, 0.6) 100%);
             border: 1px solid var(--surface-accent);
@@ -31,10 +28,10 @@
             box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 12px 24px rgba(0, 0, 0, 0.4);
             transform: translateY(-1px);
         }
+
         .header-strip-primary { border-top: 1px solid rgba(76, 214, 255, 0.5); }
-        .header-strip-amber { border-top: 1px solid rgba(255, 176, 0, 0.5); }
-        .header-strip-red { border-top: 1px solid rgba(239, 68, 68, 0.5); }
-        .header-strip-green { border-top: 1px solid rgba(34, 197, 94, 0.5); }
+        .header-strip-amber   { border-top: 1px solid rgba(255, 176, 0, 0.5); }
+        .header-strip-green   { border-top: 1px solid rgba(34, 197, 94, 0.5); }
 
         .terminal-scroll::-webkit-scrollbar { width: 3px; }
         .terminal-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -45,64 +42,31 @@
             50% { opacity: 1; }
             100% { transform: translateY(100%); opacity: 0; }
         }
-        .scanline-effect {
-            position: relative;
-            overflow: hidden;
-        }
+        .scanline-effect { position: relative; overflow: hidden; }
         .scanline-effect::after {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(to bottom, transparent, rgba(76, 214, 255, 0.03), transparent);
-            animation: scanline 6s linear infinite;
-            pointer-events: none;
-        }
-        .gauge-gradient {
-            filter: drop-shadow(0 0 12px rgba(76, 214, 255, 0.4));
+            animation: scanline 6s linear infinite; pointer-events: none;
         }
 
-        @keyframes pulse-ring {
-            0% { transform: scale(0.8); opacity: 1; }
-            100% { transform: scale(2.5); opacity: 0; }
-        }
-        .pulse-ring::before {
-            content: "";
-            position: absolute;
-            inset: -4px;
-            border-radius: 50%;
-            border: 2px solid var(--electric-cyan);
-            animation: pulse-ring 1.5s ease-out infinite;
-        }
+        .gauge-gradient { filter: drop-shadow(0 0 12px rgba(76, 214, 255, 0.4)); }
 
         @keyframes fade-in-up {
             from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        .animate-fade-in-up {
-            animation: fade-in-up 0.5s ease-out forwards;
-        }
-
-        @keyframes typing-dots {
-            0%, 20% { content: "."; }
-            40% { content: ".."; }
-            60%, 100% { content: "..."; }
-        }
+        .animate-fade-in-up { animation: fade-in-up 0.5s ease-out forwards; }
 
         .loading-shimmer {
             background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(76,214,255,0.06) 50%, rgba(255,255,255,0.02) 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s ease-in-out infinite;
+            background-size: 200% 100%; animation: shimmer 1.5s ease-in-out infinite;
         }
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-        /* Risk level color coding */
-        .risk-low { color: #22c55e; }
-        .risk-medium { color: #f59e0b; }
-        .risk-high { color: #ef4444; }
-        .risk-critical { color: #dc2626; text-shadow: 0 0 12px rgba(220, 38, 38, 0.5); }
+        /* Drag-and-drop zone */
+        .drop-zone { border: 2px dashed rgba(76, 214, 255, 0.2); transition: all 0.3s ease; }
+        .drop-zone.drag-over { border-color: rgba(76, 214, 255, 0.6); background: rgba(76, 214, 255, 0.03); }
+        .drop-zone:hover { border-color: rgba(76, 214, 255, 0.4); }
     </style>
     <script>
         tailwind.config = {
@@ -110,27 +74,17 @@
             theme: {
                 extend: {
                     colors: {
-                        "surface": "#0e1417",
-                        "background": "#090e11",
-                        "on-surface": "#dde3e7",
-                        "on-surface-variant": "#859399",
-                        "primary": "#4cd6ff",
-                        "on-primary": "#003543",
-                        "outline": "#3c494e",
-                        "outline-variant": "#2f3639",
-                        "surface-container": "#1a2123",
-                        "surface-container-low": "#161d1f",
-                        "surface-container-high": "#242b2e",
-                        "surface-container-lowest": "#05080a",
-                        "surface-container-highest": "#2f3639",
+                        "surface": "#0e1417", "background": "#090e11",
+                        "on-surface": "#dde3e7", "on-surface-variant": "#859399",
+                        "primary": "#4cd6ff", "on-primary": "#003543",
+                        "outline": "#3c494e", "outline-variant": "#2f3639",
+                        "surface-container": "#1a2123", "surface-container-low": "#161d1f",
+                        "surface-container-high": "#242b2e", "surface-container-lowest": "#05080a",
                     },
                     fontFamily: {
-                        "headline-sm": ["Inter"],
-                        "label-caps": ["Inter"],
-                        "headline-lg": ["Inter"],
-                        "data-display": ["JetBrains Mono"],
-                        "body-md": ["Inter"],
-                        "label-mono": ["JetBrains Mono"],
+                        "headline-sm": ["Inter"], "label-caps": ["Inter"],
+                        "headline-lg": ["Inter"], "data-display": ["JetBrains Mono"],
+                        "body-md": ["Inter"], "label-mono": ["JetBrains Mono"],
                     },
                     fontSize: {
                         "headline-sm": ["16px", { lineHeight: "22px", fontWeight: "600" }],
@@ -141,12 +95,8 @@
                         "label-mono": ["11px", { lineHeight: "14px", letterSpacing: "0.04em", fontWeight: "500" }],
                     },
                     spacing: {
-                        "gutter": "20px",
-                        "stack-lg": "28px",
-                        "margin-page": "32px",
-                        "container-padding": "24px",
-                        "stack-md": "16px",
-                        "stack-sm": "8px",
+                        "gutter": "20px", "stack-lg": "28px", "margin-page": "32px",
+                        "container-padding": "24px", "stack-md": "16px", "stack-sm": "8px",
                     },
                 },
             },
@@ -156,21 +106,18 @@
 
 <body class="font-body-md text-body-md selection:bg-primary/20 selection:text-primary">
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- TOP NAVIGATION BAR                                                      -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<nav id="top-nav" class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-outline-variant/30 flex justify-between items-center px-gutter h-14">
-    <div class="flex items-center gap-stack-lg">
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- TOP BAR                                                             -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<nav id="top-nav" class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-outline-variant/30 flex items-center px-6 h-14 gap-4">
+    <!-- Brand -->
+    <div class="flex items-center gap-2 shrink-0">
+        <span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings:'FILL' 1;">shield</span>
         <span class="font-headline-sm text-[15px] font-extrabold tracking-[0.1em] text-primary">VIGILANCE_OS</span>
-        <div class="hidden md:flex gap-6 ml-margin-page">
-            <a class="font-label-caps text-label-caps text-primary border-b-2 border-primary/60 pb-4 mt-4 transition-all" href="#">NETWORK</a>
-            <a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">AUDITS</a>
-            <a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">INTELLIGENCE</a>
-        </div>
     </div>
 
-    <!-- Vendor Input + Run Analysis -->
-    <div class="flex-1 max-w-xl px-gutter">
+    <!-- Vendor Input -->
+    <div class="flex-1 max-w-xl">
         <div class="relative flex items-center gap-2">
             <span class="material-symbols-outlined absolute left-3 text-on-surface-variant text-[18px] pointer-events-none">search</span>
             <input
@@ -190,192 +137,156 @@
         </div>
     </div>
 
-    <div class="flex items-center gap-stack-md">
-        <div class="flex gap-1 ml-2">
-            <span class="material-symbols-outlined p-2 text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-[20px]">notifications</span>
-            <span class="material-symbols-outlined p-2 text-on-surface-variant hover:text-primary transition-colors cursor-pointer text-[20px]">account_circle</span>
-        </div>
+    <!-- System Status Indicator -->
+    <div class="shrink-0 flex items-center gap-2">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(76,214,255,0.8)]"></span>
+        <span id="status-text" class="font-label-mono text-[10px] text-on-surface-variant">READY</span>
     </div>
 </nav>
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- SIDE NAVIGATION BAR                                                     -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<aside class="fixed left-0 top-14 h-[calc(100vh-56px)] w-[240px] bg-surface-container-lowest/50 border-r border-outline-variant/20 flex flex-col py-stack-lg gap-4">
-    <div class="px-gutter mb-4">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center border border-primary/20 shadow-inner">
-                <span class="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings:'FILL' 1;">shield</span>
-            </div>
-            <div>
-                <h3 class="font-label-caps text-[11px] font-bold text-primary leading-tight tracking-widest">VIGILANCE CORE</h3>
-                <p class="text-[9px] text-on-surface-variant/70 uppercase tracking-tighter">Precision Intelligence</p>
-            </div>
-        </div>
-    </div>
-    <div class="flex flex-col flex-1 px-3">
-        <a class="flex items-center gap-3 px-4 py-2.5 bg-primary/10 text-primary rounded-lg mb-1 group transition-all" href="#">
-            <span class="material-symbols-outlined text-[18px] group-hover:scale-110 transition-transform">radar</span>
-            <span class="font-label-caps text-[11px]">ACTIVE SCANS</span>
-        </a>
-        <a class="flex items-center gap-3 px-4 py-2.5 text-on-surface-variant hover:bg-surface-container-high/40 hover:text-on-surface rounded-lg mb-1 transition-all" href="#">
-            <span class="material-symbols-outlined text-[18px]">analytics</span>
-            <span class="font-label-caps text-[11px]">HISTORICAL DATA</span>
-        </a>
-        <a class="flex items-center gap-3 px-4 py-2.5 text-on-surface-variant hover:bg-surface-container-high/40 hover:text-on-surface rounded-lg transition-all" href="#">
-            <span class="material-symbols-outlined text-[18px]">settings</span>
-            <span class="font-label-caps text-[11px]">CONFIGURATION</span>
-        </a>
-    </div>
-    <div class="mt-auto px-4 flex flex-col gap-3">
-        <div id="system-status" class="p-3 bg-surface-container-low/40 rounded-xl border border-outline-variant/10">
-            <div class="flex items-center gap-2 mb-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(76,214,255,0.8)]"></span>
-                <span class="text-[10px] font-bold text-primary tracking-wider uppercase">System Ready</span>
-            </div>
-            <div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                <div id="system-progress" class="bg-primary/40 h-full w-0 transition-all duration-1000"></div>
-            </div>
-            <p id="system-latency" class="text-[9px] text-on-surface-variant mt-2">Awaiting input...</p>
-        </div>
-    </div>
-</aside>
-
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- MAIN CONTENT AREA                                                       -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<main class="ml-[240px] mt-14 p-8 min-h-screen">
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MAIN CONTENT                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<main class="mt-14 px-6 py-8 max-w-[1400px] mx-auto min-h-screen">
 
     <!-- Page Header -->
-    <header id="page-header" class="flex justify-between items-end mb-stack-lg border-b border-outline-variant/20 pb-stack-md">
+    <header class="flex justify-between items-end mb-6 border-b border-outline-variant/20 pb-4">
         <div>
             <nav class="flex items-center gap-2 text-on-surface-variant/60 font-label-mono text-[10px] mb-2">
                 <span>VENDORS</span>
                 <span class="text-outline-variant text-[14px]">/</span>
                 <span id="breadcrumb-vendor" class="text-primary/70">AWAITING INPUT</span>
             </nav>
-            <h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Entity Due Diligence Profile</h1>
+            <h1 id="page-title" class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Vendor Due Diligence Console</h1>
         </div>
         <div class="text-right">
-            <div class="flex flex-col gap-1">
-                <span id="report-id" class="font-label-mono text-[10px] px-2 py-0.5 bg-white/5 text-on-surface-variant/80 rounded border border-white/10">REPORT ID: —</span>
-                <p id="last-sync" class="font-label-mono text-[9px] text-primary/60 tracking-widest">LAST SYNC: —</p>
-            </div>
+            <span id="report-id" class="font-label-mono text-[10px] px-2 py-0.5 bg-white/5 text-on-surface-variant/80 rounded border border-white/10">REPORT ID: —</span>
+            <p id="last-sync" class="font-label-mono text-[9px] text-primary/60 tracking-widest mt-1">LAST SYNC: —</p>
         </div>
     </header>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- IDLE STATE: Shown before any analysis is run                     -->
+    <!-- IDLE STATE                                                      -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <div id="idle-state" class="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <div class="w-20 h-20 bg-primary/5 rounded-2xl flex items-center justify-center border border-primary/10 mb-6">
-            <span class="material-symbols-outlined text-primary text-[40px]" style="font-variation-settings:'FILL' 1;">radar</span>
+    <div id="idle-state" class="flex flex-col items-center justify-center min-h-[55vh] text-center">
+
+        <!-- PDF Upload Zone -->
+        <div class="w-full max-w-lg mb-12">
+            <div
+                id="drop-zone"
+                class="drop-zone rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer relative"
+                onclick="document.getElementById('file-input').click()"
+            >
+                <input id="file-input" type="file" accept=".pdf" class="hidden" onchange="handleFileUpload(event)" />
+                <span class="material-symbols-outlined text-primary/50 text-[36px] mb-3">upload_file</span>
+                <p class="font-headline-sm text-[14px] text-on-surface mb-1">Upload Compliance Policy</p>
+                <p class="text-[12px] text-on-surface-variant/60">Drag & drop a PDF or click to browse. Ingests into the RAG vector store.</p>
+            </div>
+            <!-- Upload Status -->
+            <div id="upload-status" class="hidden mt-3 p-3 rounded-lg text-[12px] font-label-mono"></div>
         </div>
-        <h2 class="font-headline-sm text-[20px] text-on-surface mb-2">Ready to Scan</h2>
-        <p class="text-on-surface-variant text-[14px] max-w-md leading-relaxed">
-            Enter a vendor name in the search bar above and click <strong class="text-primary">RUN ANALYSIS</strong> to initiate a full OSINT + RAG + AI risk assessment.
+
+        <!-- Instructions -->
+        <div class="w-16 h-16 bg-primary/5 rounded-2xl flex items-center justify-center border border-primary/10 mb-5">
+            <span class="material-symbols-outlined text-primary text-[32px]" style="font-variation-settings:'FILL' 1;">radar</span>
+        </div>
+        <h2 class="font-headline-sm text-[18px] text-on-surface mb-2">Awaiting System Input</h2>
+        <p class="text-on-surface-variant text-[13px] max-w-sm leading-relaxed">
+            Upload internal policies above, then enter a vendor name and click <strong class="text-primary">RUN ANALYSIS</strong>.
         </p>
-        <div class="mt-8 flex gap-3">
-            <button onclick="fillAndRun('TikTok')" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[12px] text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all">Try "TikTok"</button>
-            <button onclick="fillAndRun('Meta')" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[12px] text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all">Try "Meta"</button>
-            <button onclick="fillAndRun('Palantir')" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[12px] text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all">Try "Palantir"</button>
+        <div class="mt-6 flex gap-3">
+            <button onclick="fillAndRun('TikTok')" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[12px] text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all">TikTok</button>
+            <button onclick="fillAndRun('Meta')" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[12px] text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all">Meta</button>
+            <button onclick="fillAndRun('Palantir')" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[12px] text-on-surface-variant hover:text-primary hover:border-primary/30 transition-all">Palantir</button>
         </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- LOADING STATE: Shown while the API is processing                -->
+    <!-- LOADING STATE                                                   -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <div id="loading-state" class="hidden flex-col items-center justify-center min-h-[60vh] text-center">
-        <div class="relative w-20 h-20 mb-6">
+    <div id="loading-state" class="hidden flex-col items-center justify-center min-h-[55vh] text-center">
+        <div class="relative w-16 h-16 mb-5">
             <div class="absolute inset-0 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-center">
-                <span class="material-symbols-outlined text-primary text-[36px] animate-spin">progress_activity</span>
+                <span class="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
             </div>
         </div>
-        <h2 class="font-headline-sm text-[20px] text-on-surface mb-2">Agents Working...</h2>
-        <p id="loading-status" class="text-on-surface-variant text-[14px] max-w-md leading-relaxed">
-            Running OSINT web reconnaissance, retrieving internal policy clauses, and synthesizing the final risk verdict. This may take 30–60 seconds.
+        <h2 class="font-headline-sm text-[18px] text-on-surface mb-2">Agents Working...</h2>
+        <p class="text-on-surface-variant text-[13px] max-w-sm leading-relaxed">
+            Running OSINT reconnaissance, retrieving internal policies, and synthesizing the risk verdict. This takes 30–60 seconds.
         </p>
-        <div class="mt-6 w-64">
+        <div class="mt-5 w-56">
             <div class="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
-                <div class="bg-primary/60 h-full rounded-full loading-shimmer" style="width: 100%"></div>
+                <div class="bg-primary/60 h-full rounded-full loading-shimmer" style="width:100%"></div>
             </div>
         </div>
-        <!-- Live terminal feed -->
-        <div class="mt-8 w-full max-w-2xl glass-card bg-black/40 p-4 rounded-xl text-left">
-            <div class="flex items-center gap-2 mb-3 border-b border-white/5 pb-2">
+        <!-- Terminal -->
+        <div class="mt-6 w-full max-w-2xl glass-card bg-black/40 p-4 rounded-xl text-left">
+            <div class="flex items-center gap-2 mb-2 border-b border-white/5 pb-2">
                 <span class="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></span>
                 <span class="font-label-caps text-[9px] text-primary tracking-widest">PIPELINE LOG</span>
             </div>
-            <div id="loading-terminal" class="font-label-mono text-[11px] text-primary/70 space-y-1.5 max-h-[120px] overflow-y-auto terminal-scroll">
-                <p>[BOOT] Initializing OSINT Agent...</p>
+            <div id="loading-terminal" class="font-label-mono text-[11px] text-primary/70 space-y-1 max-h-[120px] overflow-y-auto terminal-scroll">
+                <p>[BOOT] Pipeline initiated...</p>
             </div>
         </div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- ERROR STATE: Shown when the API call fails                      -->
+    <!-- ERROR STATE                                                     -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <div id="error-state" class="hidden flex-col items-center justify-center min-h-[60vh] text-center">
-        <div class="w-20 h-20 bg-red-500/5 rounded-2xl flex items-center justify-center border border-red-500/20 mb-6">
-            <span class="material-symbols-outlined text-red-400 text-[40px]">error</span>
+    <div id="error-state" class="hidden flex-col items-center justify-center min-h-[55vh] text-center">
+        <div class="w-16 h-16 bg-red-500/5 rounded-2xl flex items-center justify-center border border-red-500/20 mb-5">
+            <span class="material-symbols-outlined text-red-400 text-[32px]">error</span>
         </div>
-        <h2 class="font-headline-sm text-[20px] text-red-400 mb-2">Analysis Failed</h2>
-        <p id="error-message" class="text-on-surface-variant text-[14px] max-w-md leading-relaxed">
-            An unexpected error occurred.
-        </p>
-        <button onclick="retryAnalysis()" class="mt-6 px-6 py-2 bg-primary/90 text-on-primary rounded-lg font-label-caps text-[10px] tracking-widest hover:bg-primary transition-all">
-            RETRY
-        </button>
+        <h2 class="font-headline-sm text-[18px] text-red-400 mb-2">Analysis Failed</h2>
+        <p id="error-message" class="text-on-surface-variant text-[13px] max-w-sm leading-relaxed">An unexpected error occurred.</p>
+        <button onclick="retryAnalysis()" class="mt-5 px-6 py-2 bg-primary/90 text-on-primary rounded-lg font-label-caps text-[10px] tracking-widest hover:bg-primary transition-all">RETRY</button>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════ -->
-    <!-- RESULTS STATE: The full dashboard, shown after successful API    -->
+    <!-- RESULTS STATE                                                   -->
     <!-- ═══════════════════════════════════════════════════════════════ -->
     <div id="results-state" class="hidden">
-        <div class="grid grid-cols-12 gap-6">
+        <div class="grid grid-cols-12 gap-5">
 
-            <!-- ─── Overall Risk Score Gauge ─── -->
-            <div class="col-span-12 lg:col-span-4 glass-card header-strip-primary p-container-padding flex flex-col items-center justify-center scanline-effect min-h-[360px] rounded-xl">
+            <!-- Risk Gauge -->
+            <div class="col-span-12 lg:col-span-4 glass-card header-strip-primary p-container-padding flex flex-col items-center justify-center scanline-effect min-h-[340px] rounded-xl">
                 <h3 class="font-label-caps text-label-caps text-primary/80 self-start mb-auto">OVERALL RISK ASSESSMENT</h3>
-                <div class="relative w-52 h-52 flex items-center justify-center my-6">
+                <div class="relative w-48 h-48 flex items-center justify-center my-4">
                     <svg class="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
                         <circle cx="50" cy="50" fill="none" r="42" stroke="rgba(255,255,255,0.03)" stroke-width="6"></circle>
                         <circle id="gauge-circle" class="gauge-gradient transition-all duration-1000" cx="50" cy="50" fill="none" r="42" stroke="currentColor" stroke-dasharray="264" stroke-dashoffset="264" stroke-linecap="round" stroke-width="6" style="color: var(--electric-cyan)"></circle>
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
-                        <span id="gauge-score" class="font-data-display text-[64px] font-bold text-on-surface tracking-tighter">—</span>
+                        <span id="gauge-score" class="font-data-display text-[56px] font-bold text-on-surface tracking-tighter">—</span>
                         <span class="font-label-mono text-[10px] text-on-surface-variant/60 uppercase tracking-[0.2em] -mt-1">Confidence</span>
                     </div>
                 </div>
-                <div class="w-full mt-auto pt-4 border-t border-white/5">
-                    <div class="flex items-center justify-center gap-3">
-                        <span id="risk-badge" class="font-data-display text-[22px] font-bold tracking-wider">—</span>
+                <div class="w-full mt-auto pt-3 border-t border-white/5">
+                    <div class="flex items-center justify-center">
+                        <span id="risk-badge" class="font-data-display text-[20px] font-bold tracking-wider">—</span>
                     </div>
                 </div>
             </div>
 
-            <!-- ─── Risk Factors (from OSINT + RAG) ─── -->
+            <!-- Risk Factors -->
             <div class="col-span-12 lg:col-span-5 glass-card header-strip-amber p-container-padding rounded-xl">
-                <div class="flex justify-between items-center mb-6">
+                <div class="flex justify-between items-center mb-5">
                     <h3 class="font-label-caps text-label-caps text-on-surface/80">IDENTIFIED RISK FACTORS</h3>
                     <span id="risk-count-badge" class="font-label-mono text-[9px] px-2 py-1 bg-amber-500/5 text-amber-500/80 border border-amber-500/20 rounded">— FACTORS</span>
                 </div>
-                <div id="risk-factors-list" class="flex flex-col gap-3 max-h-[280px] overflow-y-auto terminal-scroll pr-1">
-                    <!-- Dynamically populated -->
-                </div>
+                <div id="risk-factors-list" class="flex flex-col gap-3 max-h-[270px] overflow-y-auto terminal-scroll pr-1"></div>
             </div>
 
-            <!-- ─── Recommendations ─── -->
+            <!-- Recommendations -->
             <div class="col-span-12 lg:col-span-3 glass-card header-strip-green p-container-padding flex flex-col rounded-xl">
-                <h3 class="font-label-caps text-label-caps text-on-surface/80 mb-6">RECOMMENDATIONS</h3>
-                <div id="recommendations-list" class="space-y-4 flex-1 max-h-[280px] overflow-y-auto terminal-scroll pr-1">
-                    <!-- Dynamically populated -->
-                </div>
+                <h3 class="font-label-caps text-label-caps text-on-surface/80 mb-5">RECOMMENDATIONS</h3>
+                <div id="recommendations-list" class="space-y-4 flex-1 max-h-[270px] overflow-y-auto terminal-scroll pr-1"></div>
             </div>
 
-            <!-- ─── AI Judgment Terminal ─── -->
+            <!-- AI Judgment Terminal -->
             <div class="col-span-12 glass-card bg-black/40 p-container-padding relative rounded-xl overflow-hidden">
-                <div class="flex items-center gap-3 mb-4 border-b border-white/5 pb-3">
+                <div class="flex items-center gap-3 mb-3 border-b border-white/5 pb-3">
                     <span class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_var(--electric-cyan)]"></span>
                     <h3 class="font-label-caps text-[11px] text-primary tracking-widest">AI JUDGMENT ENGINE</h3>
                     <div class="ml-auto flex gap-1">
@@ -384,30 +295,26 @@
                         <div class="h-0.5 w-12 bg-primary/40"></div>
                     </div>
                 </div>
-                <div id="judgment-terminal" class="font-label-mono text-[13px] text-primary/90 space-y-2 terminal-scroll overflow-y-auto max-h-[180px] pr-2">
-                    <!-- Dynamically populated -->
-                </div>
+                <div id="judgment-terminal" class="font-label-mono text-[13px] text-primary/90 space-y-2 terminal-scroll overflow-y-auto max-h-[160px] pr-2"></div>
                 <div class="absolute inset-0 opacity-[0.02] pointer-events-none" style="background-image: radial-gradient(var(--electric-cyan) 0.5px, transparent 0.5px); background-size: 16px 16px;"></div>
             </div>
 
-            <!-- ─── Data Gaps ─── -->
+            <!-- Data Gaps -->
             <div class="col-span-12 glass-card p-container-padding rounded-xl">
                 <div class="flex items-center gap-3 mb-4">
                     <span class="material-symbols-outlined text-amber-500/80 text-[20px]">help_outline</span>
                     <h3 class="font-label-caps text-label-caps text-on-surface/80">DATA GAPS & LIMITATIONS</h3>
                 </div>
-                <div id="data-gaps-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <!-- Dynamically populated -->
-                </div>
+                <div id="data-gaps-list" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
             </div>
 
         </div>
     </div>
 </main>
 
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
-<!-- JAVASCRIPT: State Management, API Integration, Data Binding             -->
-<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- JAVASCRIPT                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
 <script>
     // ──────────────────────────────────────────────────
     // Configuration
@@ -417,25 +324,104 @@
     // ──────────────────────────────────────────────────
     // State
     // ──────────────────────────────────────────────────
-    let currentVendor = "";
-    let isLoading = false;
-    let apiResponse = null;
+    let currentVendor   = "";
+    let isLoading       = false;
+    let isUploading     = false;
+    let apiResponse     = null;
     let terminalInterval = null;
 
     // ──────────────────────────────────────────────────
     // DOM References
     // ──────────────────────────────────────────────────
-    const vendorInput    = document.getElementById("vendor-input");
-    const analyzeBtn     = document.getElementById("analyze-btn");
-    const idleState      = document.getElementById("idle-state");
-    const loadingState   = document.getElementById("loading-state");
-    const errorState     = document.getElementById("error-state");
-    const resultsState   = document.getElementById("results-state");
+    const vendorInput  = document.getElementById("vendor-input");
+    const analyzeBtn   = document.getElementById("analyze-btn");
+    const idleState    = document.getElementById("idle-state");
+    const loadingState = document.getElementById("loading-state");
+    const errorState   = document.getElementById("error-state");
+    const resultsState = document.getElementById("results-state");
+    const dropZone     = document.getElementById("drop-zone");
 
-    // Allow Enter key to trigger analysis
+    // Enter key triggers analysis
     vendorInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") runAnalysis();
     });
+
+    // ──────────────────────────────────────────────────
+    // Drag & Drop for PDF Upload
+    // ──────────────────────────────────────────────────
+    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    dropZone.addEventListener("dragleave", ()  => { dropZone.classList.remove("drag-over"); });
+    dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.classList.remove("drag-over");
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.toLowerCase().endsWith(".pdf")) {
+            uploadFile(file);
+        } else {
+            showUploadStatus("error", "Only PDF files are accepted.");
+        }
+    });
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (file) uploadFile(file);
+        event.target.value = ""; // reset so the same file can be re-uploaded
+    }
+
+    // ──────────────────────────────────────────────────
+    // PDF Upload (POST /upload_policy)
+    // ──────────────────────────────────────────────────
+    async function uploadFile(file) {
+        if (isUploading) return;
+        isUploading = true;
+
+        showUploadStatus("loading", `Uploading and processing "${file.name}"...`);
+        setSystemStatus("INGESTING", "animate-pulse");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const res = await fetch(`${API_BASE}/upload_policy`, {
+                method: "POST",
+                body: formData,
+                // NOTE: Do NOT set Content-Type header manually.
+                // The browser must set it automatically with the multipart boundary.
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `Upload failed (${res.status})`);
+            }
+
+            const data = await res.json();
+            showUploadStatus(
+                "success",
+                `✓ "${data.filename}" ingested — ${data.pages_parsed} pages → ${data.parent_chunks} parent chunks, ${data.child_chunks} child chunks.`
+            );
+            setSystemStatus("READY", "animate-pulse");
+
+        } catch (err) {
+            const msg = err.message.includes("Failed to fetch")
+                ? "Backend unreachable — the Hugging Face Space may be waking up. Retry in 30s."
+                : err.message;
+            showUploadStatus("error", msg);
+            setSystemStatus("ERROR", "");
+        } finally {
+            isUploading = false;
+        }
+    }
+
+    function showUploadStatus(type, message) {
+        const el = document.getElementById("upload-status");
+        el.classList.remove("hidden");
+        el.textContent = message;
+        el.className = "mt-3 p-3 rounded-lg text-[12px] font-label-mono animate-fade-in-up ";
+
+        if (type === "success") el.className += "bg-green-500/10 text-green-400 border border-green-500/20";
+        else if (type === "error") el.className += "bg-red-500/10 text-red-400 border border-red-500/20";
+        else el.className += "bg-primary/5 text-primary/80 border border-primary/20";
+    }
 
     // ──────────────────────────────────────────────────
     // UI State Machine
@@ -446,70 +432,63 @@
         errorState.className   = "hidden";
         resultsState.className = "hidden";
 
-        if (state === "idle")    idleState.className    = "flex flex-col items-center justify-center min-h-[60vh] text-center";
-        if (state === "loading") loadingState.className = "flex flex-col items-center justify-center min-h-[60vh] text-center";
-        if (state === "error")   errorState.className   = "flex flex-col items-center justify-center min-h-[60vh] text-center";
+        if (state === "idle")    idleState.className    = "flex flex-col items-center justify-center min-h-[55vh] text-center";
+        if (state === "loading") loadingState.className = "flex flex-col items-center justify-center min-h-[55vh] text-center";
+        if (state === "error")   errorState.className   = "flex flex-col items-center justify-center min-h-[55vh] text-center";
         if (state === "results") resultsState.className = "animate-fade-in-up";
+    }
+
+    function setSystemStatus(text, dotClass) {
+        document.getElementById("status-text").textContent = text;
+        const dot = document.getElementById("status-dot");
+        dot.className = `w-2 h-2 rounded-full shadow-[0_0_8px_rgba(76,214,255,0.8)] ${dotClass}`;
+        if (text === "ERROR") { dot.classList.add("bg-red-400"); dot.classList.remove("bg-primary"); }
+        else { dot.classList.add("bg-primary"); dot.classList.remove("bg-red-400"); }
     }
 
     // ──────────────────────────────────────────────────
     // Quick-fill buttons
     // ──────────────────────────────────────────────────
-    function fillAndRun(vendor) {
-        vendorInput.value = vendor;
-        runAnalysis();
-    }
-
-    function retryAnalysis() {
-        runAnalysis();
-    }
+    function fillAndRun(vendor) { vendorInput.value = vendor; runAnalysis(); }
+    function retryAnalysis()    { runAnalysis(); }
 
     // ──────────────────────────────────────────────────
-    // Loading Terminal Simulation
+    // Loading Terminal
     // ──────────────────────────────────────────────────
     const LOADING_MESSAGES = [
-        "[OSINT] Searching DuckDuckGo for breach reports...",
-        "[OSINT] Searching for regulatory fines and penalties...",
-        "[OSINT] Searching for privacy controversies...",
+        "[OSINT] Searching for breach reports...",
+        "[OSINT] Searching for regulatory fines...",
         "[OSINT] Deduplicating and scoring findings...",
-        "[RAG] Loading embedding model (all-MiniLM-L6-v2)...",
         "[RAG] Querying Supabase vector store...",
         "[RAG] Retrieving parent document context...",
         "[JUDGE] Initializing Gemini 2.5 Flash...",
-        "[JUDGE] Cross-referencing OSINT vs internal policies...",
+        "[JUDGE] Cross-referencing OSINT vs policies...",
         "[JUDGE] Generating structured risk assessment...",
     ];
 
     function startLoadingTerminal() {
         const terminal = document.getElementById("loading-terminal");
         terminal.innerHTML = "<p>[BOOT] Pipeline initiated...</p>";
-        let msgIdx = 0;
-
+        let idx = 0;
         terminalInterval = setInterval(() => {
-            if (msgIdx < LOADING_MESSAGES.length) {
+            if (idx < LOADING_MESSAGES.length) {
                 const p = document.createElement("p");
-                p.textContent = LOADING_MESSAGES[msgIdx];
+                p.textContent = LOADING_MESSAGES[idx];
                 p.style.opacity = "0";
                 terminal.appendChild(p);
-                requestAnimationFrame(() => {
-                    p.style.transition = "opacity 0.3s ease";
-                    p.style.opacity = "1";
-                });
+                requestAnimationFrame(() => { p.style.transition = "opacity 0.3s ease"; p.style.opacity = "1"; });
                 terminal.scrollTop = terminal.scrollHeight;
-                msgIdx++;
+                idx++;
             }
-        }, 3000);
+        }, 3500);
     }
 
     function stopLoadingTerminal() {
-        if (terminalInterval) {
-            clearInterval(terminalInterval);
-            terminalInterval = null;
-        }
+        if (terminalInterval) { clearInterval(terminalInterval); terminalInterval = null; }
     }
 
     // ──────────────────────────────────────────────────
-    // Core API Call
+    // Vendor Analysis (POST /analyze)
     // ──────────────────────────────────────────────────
     async function runAnalysis() {
         const vendor = vendorInput.value.trim();
@@ -523,18 +502,13 @@
         currentVendor = vendor;
         isLoading = true;
 
-        // Update header
         document.getElementById("breadcrumb-vendor").textContent = vendor.toUpperCase();
         document.getElementById("report-id").textContent = `REPORT ID: V-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 
-        // Switch to loading state
         showState("loading");
         analyzeBtn.disabled = true;
         startLoadingTerminal();
-
-        // Update sidebar
-        document.getElementById("system-latency").textContent = "Processing...";
-        document.getElementById("system-progress").style.width = "30%";
+        setSystemStatus("ANALYZING", "animate-pulse");
 
         const startTime = performance.now();
 
@@ -553,10 +527,8 @@
             apiResponse = await response.json();
             const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
 
-            // Update sidebar
-            document.getElementById("system-latency").textContent = `Completed in ${elapsed}s`;
-            document.getElementById("system-progress").style.width = "100%";
-            document.getElementById("last-sync").textContent = `LAST SYNC: ${new Date().toUTCString().toUpperCase()}`;
+            document.getElementById("last-sync").textContent = `COMPLETED IN ${elapsed}s — ${new Date().toUTCString().toUpperCase()}`;
+            setSystemStatus("COMPLETE", "");
 
             stopLoadingTerminal();
             renderResults(apiResponse);
@@ -566,10 +538,9 @@
             stopLoadingTerminal();
             document.getElementById("error-message").textContent =
                 err.message.includes("Failed to fetch")
-                    ? "Could not reach the backend. The Hugging Face Space may be waking up from a cold start. Please wait 30 seconds and try again."
+                    ? "Backend unreachable — the Hugging Face Space may be waking up. Please wait 30 seconds and retry."
                     : `Error: ${err.message}`;
-            document.getElementById("system-latency").textContent = "Error";
-            document.getElementById("system-progress").style.width = "0%";
+            setSystemStatus("ERROR", "");
             showState("error");
 
         } finally {
@@ -582,111 +553,96 @@
     // Render Results
     // ──────────────────────────────────────────────────
     function renderResults(data) {
-        const assessment = data.risk_assessment;
-        if (!assessment) return;
+        const a = data.risk_assessment;
+        if (!a) return;
 
-        // 1. Risk Gauge
-        const confidence = Math.round((assessment.confidence_score || 0) * 100);
+        // Gauge
+        const confidence = Math.round((a.confidence_score || 0) * 100);
         const gaugeOffset = 264 - (264 * confidence / 100);
-        const gaugeCircle = document.getElementById("gauge-circle");
-        gaugeCircle.setAttribute("stroke-dashoffset", String(gaugeOffset));
+        const gc = document.getElementById("gauge-circle");
+        gc.setAttribute("stroke-dashoffset", String(gaugeOffset));
 
-        // Color the gauge based on risk level
-        const riskLevel = (assessment.overall_risk_level || "").toUpperCase();
+        const riskLevel = (a.overall_risk_level || "").toUpperCase();
         const riskColor = getRiskColor(riskLevel);
-        gaugeCircle.style.color = riskColor;
-
+        gc.style.color = riskColor;
         document.getElementById("gauge-score").textContent = confidence;
 
-        const riskBadge = document.getElementById("risk-badge");
-        riskBadge.textContent = riskLevel;
-        riskBadge.style.color = riskColor;
+        const badge = document.getElementById("risk-badge");
+        badge.textContent = riskLevel;
+        badge.style.color = riskColor;
 
-        // 2. Risk Factors
-        const riskFactors = assessment.risk_factors || [];
-        document.getElementById("risk-count-badge").textContent = `${riskFactors.length} FACTORS`;
+        // Risk Factors
+        const factors = a.risk_factors || [];
+        document.getElementById("risk-count-badge").textContent = `${factors.length} FACTORS`;
         const riskList = document.getElementById("risk-factors-list");
         riskList.innerHTML = "";
 
-        riskFactors.forEach((factor, i) => {
-            // Split "Title: Description" format if present
+        factors.forEach((factor, i) => {
             const colonIdx = factor.indexOf(":");
-            let title = `Risk Factor ${i + 1}`;
-            let desc = factor;
+            let title = `Risk Factor ${i + 1}`, desc = factor;
             if (colonIdx > 0 && colonIdx < 60) {
                 title = factor.substring(0, colonIdx).trim();
                 desc = factor.substring(colonIdx + 1).trim();
             }
-
             const card = document.createElement("div");
-            card.className = "group bg-white/5 border border-white/5 p-4 rounded-lg hover:border-amber-500/30 transition-all animate-fade-in-up";
+            card.className = "bg-white/5 border border-white/5 p-4 rounded-lg hover:border-amber-500/30 transition-all animate-fade-in-up";
             card.style.animationDelay = `${i * 100}ms`;
             card.innerHTML = `
                 <div class="flex justify-between mb-1.5">
-                    <h4 class="font-headline-sm text-[13px] text-on-surface font-semibold">${escapeHtml(title)}</h4>
+                    <h4 class="font-headline-sm text-[13px] text-on-surface font-semibold">${esc(title)}</h4>
                     <span class="material-symbols-outlined text-amber-500/80 text-[16px]">warning</span>
                 </div>
-                <p class="text-body-md text-on-surface-variant/80 text-[12px] leading-relaxed">${escapeHtml(desc)}</p>
-            `;
+                <p class="text-body-md text-on-surface-variant/80 text-[12px] leading-relaxed">${esc(desc)}</p>`;
             riskList.appendChild(card);
         });
 
-        // 3. Recommendations
-        const recommendations = assessment.recommendations || [];
+        // Recommendations
+        const recs = a.recommendations || [];
         const recList = document.getElementById("recommendations-list");
         recList.innerHTML = "";
-
-        recommendations.forEach((rec, i) => {
-            const item = document.createElement("div");
-            item.className = "flex items-start gap-3 animate-fade-in-up";
-            item.style.animationDelay = `${i * 100}ms`;
-            item.innerHTML = `
+        recs.forEach((rec, i) => {
+            const el = document.createElement("div");
+            el.className = "flex items-start gap-3 animate-fade-in-up";
+            el.style.animationDelay = `${i * 100}ms`;
+            el.innerHTML = `
                 <span class="material-symbols-outlined text-primary/80 text-[18px] mt-0.5 shrink-0">task_alt</span>
-                <p class="text-[12px] text-on-surface-variant/90 leading-relaxed">${escapeHtml(rec)}</p>
-            `;
-            recList.appendChild(item);
+                <p class="text-[12px] text-on-surface-variant/90 leading-relaxed">${esc(rec)}</p>`;
+            recList.appendChild(el);
         });
 
-        // 4. AI Judgment Terminal
+        // Judgment Terminal
         const terminal = document.getElementById("judgment-terminal");
         terminal.innerHTML = "";
-
-        const terminalLines = [
+        [
             { cls: "opacity-40 text-[11px]", text: `[LOG] VENDOR: ${data.vendor || currentVendor}` },
             { cls: "opacity-40 text-[11px]", text: `[LOG] RISK LEVEL: ${riskLevel} | CONFIDENCE: ${confidence}%` },
-            { cls: "opacity-40 text-[11px]", text: `[LOG] FACTORS IDENTIFIED: ${riskFactors.length} | RECOMMENDATIONS: ${recommendations.length}` },
-            { cls: "mt-4 border-l-2 border-primary/30 pl-4 leading-relaxed font-medium", text: `> JUDGMENT: ${assessment.summary || "No summary available."}` },
-        ];
-
-        terminalLines.forEach((line) => {
+            { cls: "opacity-40 text-[11px]", text: `[LOG] FACTORS: ${factors.length} | RECOMMENDATIONS: ${recs.length}` },
+            { cls: "mt-3 border-l-2 border-primary/30 pl-4 leading-relaxed font-medium", text: `> JUDGMENT: ${a.summary || "No summary available."}` },
+        ].forEach(line => {
             const p = document.createElement("p");
             p.className = line.cls;
             p.textContent = line.text;
             terminal.appendChild(p);
         });
-
-        // Blinking cursor
         const cursor = document.createElement("p");
         cursor.className = "mt-2 animate-pulse text-primary/40";
         cursor.textContent = "█";
         terminal.appendChild(cursor);
 
-        // 5. Data Gaps
-        const dataGaps = assessment.data_gaps || [];
+        // Data Gaps
+        const gaps = a.data_gaps || [];
         const gapsList = document.getElementById("data-gaps-list");
         gapsList.innerHTML = "";
-
-        dataGaps.forEach((gap, i) => {
-            const item = document.createElement("div");
-            item.className = "bg-white/5 border border-white/5 p-3 rounded-lg animate-fade-in-up";
-            item.style.animationDelay = `${i * 80}ms`;
-            item.innerHTML = `
+        gaps.forEach((gap, i) => {
+            const el = document.createElement("div");
+            el.className = "bg-white/5 border border-white/5 p-3 rounded-lg animate-fade-in-up";
+            el.style.animationDelay = `${i * 80}ms`;
+            el.innerHTML = `
                 <div class="flex items-start gap-2">
                     <span class="material-symbols-outlined text-amber-500/60 text-[16px] mt-0.5 shrink-0">info</span>
-                    <p class="text-[12px] text-on-surface-variant/80 leading-relaxed">${escapeHtml(gap)}</p>
-                </div>
-            `;
-            gapsList.appendChild(item);
+                    <p class="text-[12px] text-on-surface-variant/80 leading-relaxed">${esc(gap)}</p>
+                </div>`;
+            gapsList.appendChild(el);
         });
     }
 
@@ -703,11 +659,56 @@
         }
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
+    function esc(text) {
+        const d = document.createElement("div");
+        d.textContent = text;
+        return d.innerHTML;
     }
 </script>
+
+<!--
+═══════════════════════════════════════════════════════════════════
+🧠 Mentor Notes: CORS & Fetch
+═══════════════════════════════════════════════════════════════════
+
+HOW THE FRONTEND TALKS TO THE CLOUD BACKEND
+────────────────────────────────────────────
+This frontend is a static HTML file. It can be opened from the
+local filesystem (file://), served from localhost, or deployed
+to Firebase Hosting. In all cases, the origin differs from our
+backend at https://rudedude7-trust-agent.hf.space.
+
+When a browser makes a cross-origin request (different domain,
+port, or protocol), it first sends a preflight OPTIONS request.
+If the server does not respond with the correct CORS headers
+(Access-Control-Allow-Origin, etc.), the browser silently blocks
+the actual request. The user sees "Failed to fetch" with no
+further explanation.
+
+We handle this with two pieces:
+
+1. BACKEND (api.py): We added CORSMiddleware with allow_origins=["*"]
+   This tells FastAPI to respond to every preflight with headers that
+   say "yes, any origin may call me." In production, you would
+   restrict this to your specific frontend domain.
+
+2. FRONTEND (this file): We use the standard `fetch()` API:
+   - For JSON endpoints (/analyze): We set Content-Type to
+     application/json manually. This triggers a preflight.
+   - For file uploads (/upload_policy): We do NOT set Content-Type
+     manually. The browser must auto-generate the multipart/form-data
+     boundary string. If you set Content-Type yourself, the boundary
+     is missing and the server rejects the payload with a 422 error.
+     This is the #1 mistake juniors make with FormData uploads.
+
+WHY "FAILED TO FETCH"?
+──────────────────────
+Hugging Face Spaces spin down after inactivity. The first request
+after a cold start may take 30-60 seconds. If the Space hasn't
+booted yet, fetch() throws a TypeError("Failed to fetch") because
+the TCP connection itself times out. We catch this and show a
+human-readable message asking the user to retry.
+═══════════════════════════════════════════════════════════════════
+-->
 </body>
 </html>
