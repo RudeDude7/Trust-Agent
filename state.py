@@ -36,6 +36,7 @@ class RAGClause(TypedDict):
     source_document: str            # filename or document title it came from
     similarity_score: float         # cosine similarity from the vector search
     parent_context: str             # the larger parent chunk for grounding
+    role: str                       # 'internal' or 'vendor'
 
 
 class RiskAssessment(TypedDict):
@@ -43,8 +44,9 @@ class RiskAssessment(TypedDict):
     overall_risk_level: str         # "LOW", "MEDIUM", "HIGH", "CRITICAL"
     confidence_score: float         # 0.0 – 1.0
     summary: str                    # 2–3 sentence executive summary
-    risk_factors: list[str]         # bullet-point list of identified risks
-    recommendations: list[str]      # actionable next steps
+    osint_inferences: list[str]     # identified risks from OSINT
+    rag_inferences: list[str]       # identified risks from RAG
+    comparative_analysis: str       # internal vs vendor policy comparison
     data_gaps: list[str]            # areas where evidence was insufficient
 
 

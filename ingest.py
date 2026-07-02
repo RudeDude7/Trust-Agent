@@ -105,15 +105,20 @@ def get_embedding_model() -> HuggingFaceEmbeddings:
 # ---------------------------------------------------------------------------
 # Pipeline stages
 # ---------------------------------------------------------------------------
-def load_pdf(pdf_path: Path) -> list[Document]:
-    """Stage 1: Load raw pages from the PDF."""
+def load_pdf(pdf_path: Path, role: str) -> list[Document]:
+    """Stage 1: Load raw pages from the PDF and tag with role metadata."""
     if not pdf_path.exists():
         log.error("PDF not found: %s", pdf_path)
         sys.exit(1)
 
     loader = PyMuPDFLoader(str(pdf_path))
     pages: list[Document] = loader.load()
-    log.info("Loaded %d raw pages from %s", len(pages), pdf_path.name)
+    
+    # Tag all pages with the specified role
+    for page in pages:
+        page.metadata["role"] = role
+        
+    log.info("Loaded %d raw pages from %s (role: %s)", len(pages), pdf_path.name, role)
     return pages
 
 
@@ -250,6 +255,13 @@ def main() -> None:
         default=DEFAULT_PDF,
         help="Path to the PDF to ingest (default: sample_policy.pdf)",
     )
+    parser.add_argument(
+        "--role",
+        type=str,
+        default="internal",
+        choices=["internal", "vendor"],
+        help="The role of the document (internal or vendor).",
+    )
     args = parser.parse_args()
 
     log.info("=" * 56)
@@ -261,7 +273,7 @@ def main() -> None:
     embedding_model: HuggingFaceEmbeddings = get_embedding_model()
 
     # 2. Load → Split → Embed → Insert.
-    pages: list[Document] = load_pdf(args.pdf)
+    pages: list[Document] = load_pdf(args.pdf, args.role)
     hierarchy: list[dict] = build_chunk_hierarchy(pages)
     generate_child_embeddings(hierarchy, embedding_model)
     insert_into_supabase(hierarchy, db)

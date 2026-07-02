@@ -16,12 +16,19 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import uuid
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
+
 from main import build_graph
 from state import VendorDueDiligenceState
+
+# Global session cache for stateless API chat follow-ups
+sessions: dict[str, VendorDueDiligenceState] = {}
 
 # Reuse the battle-tested ingestion functions from ingest.py
 from ingest import (
@@ -102,9 +109,13 @@ async def analyze_vendor(request: AnalyzeRequest):
         if not assessment:
             raise HTTPException(status_code=500, detail="Pipeline completed but no risk assessment was generated.")
 
+        session_id = str(uuid.uuid4())
+        sessions[session_id] = final_state # type: ignore
+
         return {
             "status": "success",
             "vendor": request.vendor_name,
+            "session_id": session_id,
             "risk_assessment": assessment
         }
 
@@ -117,12 +128,20 @@ async def analyze_vendor(request: AnalyzeRequest):
 # ENDPOINT 2: Upload a PDF policy document for RAG ingestion
 # ═══════════════════════════════════════════════════════════════════════════
 @app.post("/upload_policy")
-async def upload_policy(file: UploadFile = File(...)):
+async def upload_policy(
+    file: UploadFile = File(...),
+    role: str = Form(...)
+):
     """
-    Accepts a PDF document, processes it through the ingestion pipeline
-    (parse → chunk → embed → insert into Supabase), and returns the count
-    of chunks successfully ingested.
+    Accepts a PDF document and a role ('internal' or 'vendor'), processes it 
+    through the ingestion pipeline (parse → chunk → embed → insert into Supabase).
     """
+    if role not in ["internal", "vendor"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Role must be exactly 'internal' or 'vendor'."
+        )
+
     # Validate file type
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -152,8 +171,8 @@ async def upload_policy(file: UploadFile = File(...)):
 
         log.info("Saved to temp file: %s", tmp_path)
 
-        # Stage 1: Load the PDF pages
-        pages = load_pdf(Path(tmp_path))
+        # Stage 1: Load the PDF pages with the role metadata
+        pages = load_pdf(Path(tmp_path), role)
 
         if not pages:
             raise HTTPException(status_code=400, detail="PDF appears to be empty or unreadable.")
@@ -209,6 +228,55 @@ async def upload_policy(file: UploadFile = File(...)):
 async def health_check():
     """Simple health check endpoint for Cloud Run / load balancers."""
     return {"status": "healthy"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 4: Chat with the analysis results
+# ═══════════════════════════════════════════════════════════════════════════
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    """
+    Conversational endpoint to ask follow-up questions about the analysis.
+    Uses the session_id to retrieve the cached graph state.
+    """
+    state = sessions.get(request.session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+        
+    vendor_name = state.get("vendor_name", "unknown")
+    rag_clauses = state.get("rag_clauses", [])
+    osint_findings = state.get("osint_findings", [])
+    
+    # Construct context
+    context_text = f"Vendor: {vendor_name}\n\nRAG Clauses:\n"
+    for clause in rag_clauses:
+        context_text += f"- (Role: {clause.get('role', 'unknown')}) {clause.get('clause_text')}\n"
+    
+    context_text += "\nOSINT Findings:\n"
+    for finding in osint_findings:
+        context_text += f"- [{finding.get('finding_type')}] {finding.get('title')}: {finding.get('snippet')}\n"
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an AI assistant helping a user analyze a vendor due diligence report. "
+                   "Answer the user's question using ONLY the provided context from the RAG and OSINT pipeline. "
+                   "If the context does not contain the answer, say you do not know based on the current data.\n\n"
+                   "=== CONTEXT ===\n{context}"),
+        ("user", "{message}")
+    ])
+    
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0)
+    chain = prompt | llm
+    
+    try:
+        response = chain.invoke({"context": context_text, "message": request.message})
+        return {"status": "success", "response": response.content}
+    except Exception as e:
+        log.error("Chat endpoint failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================

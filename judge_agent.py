@@ -48,11 +48,14 @@ class RiskAssessmentModel(BaseModel):
     summary: str = Field(
         description="A 2–3 sentence executive summary of the vendor's risk profile."
     )
-    risk_factors: list[str] = Field(
-        description="A bullet-point list of identified risks, referencing both internal policies and external news."
+    osint_inferences: list[str] = Field(
+        description="Identified risks and inferences derived strictly from the external OSINT findings."
     )
-    recommendations: list[str] = Field(
-        description="A list of actionable next steps for the risk and compliance team."
+    rag_inferences: list[str] = Field(
+        description="Identified risks and inferences derived strictly from the vendor's policy (RAG clauses)."
+    )
+    comparative_analysis: str = Field(
+        description="A paragraph comparing the vendor's policy against the internal company policy, highlighting gaps or discrepancies."
     )
     data_gaps: list[str] = Field(
         description="Areas where evidence was insufficient to make a firm determination."
@@ -64,15 +67,15 @@ class RiskAssessmentModel(BaseModel):
 # ---------------------------------------------------------------------------
 JUDGE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are a Senior Risk and Compliance Officer performing vendor due diligence.
-Your job is to evaluate a vendor's risk profile by cross-referencing their internal stated policies (RAG Clauses) against external reality (OSINT Findings).
+Your job is to evaluate a vendor's risk profile by performing a Comparative Analysis. You must cross-reference their internal stated policies against our company's internal policies (provided in the RAG Clauses, labeled with their respective roles), and against external reality (OSINT Findings).
 
 Analyze the provided inputs and determine the risk level:
-- LOW: No major breaches or regulatory actions, strong policies.
-- MEDIUM: Minor incidents or vague policies, but no catastrophic failures.
-- HIGH: Significant past breaches, regulatory fines, or alarming discrepancies between stated policy and actual events.
-- CRITICAL: Active existential risks, bankruptcy, massive unmitigated breaches, or state-sponsored ties.
+- LOW: No major breaches or regulatory actions, strong policies aligned with ours.
+- MEDIUM: Minor incidents or vague policies, minor misalignment.
+- HIGH: Significant past breaches, regulatory fines, or alarming discrepancies between our policy and the vendor's policy.
+- CRITICAL: Active existential risks, bankruptcy, massive unmitigated breaches.
 
-Be extremely objective and structured. Rely ONLY on the provided RAG and OSINT data."""),
+You must explicitly separate your findings into `osint_inferences` (from news/web) and `rag_inferences` (from policy text). In your `comparative_analysis`, explicitly state how the vendor's policy compares to the internal policy. Rely ONLY on the provided RAG and OSINT data."""),
     ("user", """Vendor Name: {vendor_name}
 
 === INTERNAL POLICIES (RAG CLAUSES) ===
@@ -146,8 +149,9 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
             overall_risk_level="CRITICAL",
             confidence_score=0.0,
             summary=f"Analysis failed due to error: {exc}",
-            risk_factors=["LLM Failure"],
-            recommendations=["Investigate system logs"],
+            osint_inferences=["LLM Failure"],
+            rag_inferences=["LLM Failure"],
+            comparative_analysis="Failed to generate comparative analysis due to an error.",
             data_gaps=["Complete assessment failure"]
         )
         return {
@@ -177,7 +181,15 @@ if __name__ == "__main__":
                 "clause_text": "We protect user data using industry standard encryption.",
                 "source_document": "privacy_policy.pdf",
                 "similarity_score": 0.85,
-                "parent_context": "We take privacy seriously. We protect user data using industry standard encryption."
+                "parent_context": "We take privacy seriously. We protect user data using industry standard encryption.",
+                "role": "vendor"
+            },
+            {
+                "clause_text": "All vendors must use AES-256 encryption at rest.",
+                "source_document": "internal_policy.pdf",
+                "similarity_score": 0.90,
+                "parent_context": "All vendors must use AES-256 encryption at rest.",
+                "role": "internal"
             }
         ]
     }
@@ -193,13 +205,14 @@ if __name__ == "__main__":
     print(f"  Risk Level   : {assessment.get('overall_risk_level')}")
     print(f"  Confidence   : {assessment.get('confidence_score')}")
     print(f"  Summary      : {assessment.get('summary')}")
+    print(f"\n  Comparative Analysis:\n    {assessment.get('comparative_analysis')}")
     
-    print("\n  Risk Factors:")
-    for f in assessment.get("risk_factors", []):
+    print("\n  OSINT Inferences:")
+    for f in assessment.get("osint_inferences", []):
         print(f"    - {f}")
         
-    print("\n  Recommendations:")
-    for r in assessment.get("recommendations", []):
+    print("\n  RAG Inferences:")
+    for r in assessment.get("rag_inferences", []):
         print(f"    - {r}")
         
     print("=" * 56 + "\n")

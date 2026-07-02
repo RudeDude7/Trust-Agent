@@ -42,7 +42,8 @@ log = logging.getLogger("rag_agent")
 # ---------------------------------------------------------------------------
 EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 EMBEDDING_DIMENSION: int = 384
-TOP_K: int = 3                            # number of child chunks to retrieve
+TOP_K_FETCH: int = 20                     # number of child chunks to retrieve from DB
+TOP_K_PER_ROLE: int = 3                   # max chunks to keep per role after filtering
 SIMILARITY_THRESHOLD: float = 0.0         # minimum cosine similarity (0 = return all)
 
 # Default query when the state doesn't supply one yet.
@@ -116,7 +117,7 @@ def _retrieve_chunks(query: str) -> list[tuple[Document, float]]:
                 "match_document_chunks",
                 {
                     "query_embedding": query_vector,
-                    "match_count": TOP_K,
+                    "match_count": TOP_K_FETCH,
                     "match_threshold": SIMILARITY_THRESHOLD,
                 },
             ).execute()
@@ -134,11 +135,15 @@ def _retrieve_chunks(query: str) -> list[tuple[Document, float]]:
     # 3. Map raw rows into LangChain Document objects with scores.
     results: list[tuple[Document, float]] = []
     for row in rows:
+        db_metadata = row.get("metadata") or {}
+        role = db_metadata.get("role", "unknown")
+        
         doc = Document(
             page_content=str(row.get("content", "")),
             metadata={
                 "document_id": str(row.get("document_id", "")),
                 "similarity":  float(row.get("similarity", 0.0)),
+                "role": role,
             },
         )
         results.append((doc, float(row.get("similarity", 0.0))))
@@ -221,11 +226,26 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
         }
 
     # Fetch parent context for each child and build RAGClause list.
+    # We will balance the results by fetching up to TOP_K_PER_ROLE per role.
     db: Client = _get_supabase_client()
     clauses: list[RAGClause] = []
     orphan_count: int = 0
+    
+    internal_count = 0
+    vendor_count = 0
 
     for doc, score in results:
+        role = doc.metadata.get("role", "unknown")
+        
+        if role == "internal":
+            if internal_count >= TOP_K_PER_ROLE:
+                continue
+            internal_count += 1
+        elif role == "vendor":
+            if vendor_count >= TOP_K_PER_ROLE:
+                continue
+            vendor_count += 1
+            
         document_id: str = str(doc.metadata.get("document_id", ""))
 
         # --- Safety Net: Level 2 (Fallback) + Level 3 (Alert) ---
@@ -253,16 +273,18 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
             "source_document":  document_id,
             "similarity_score": round(score, 4),
             "parent_context":   parent_text,
+            "role":             role,
         }
         clauses.append(clause)
         log.info(
-            "  ↳ Matched chunk (score=%.4f): \"%s…\"",
+            "  ↳ Matched %s chunk (score=%.4f): \"%s…\"",
+            role,
             score,
             doc.page_content[:60],
         )
 
     summary: str = (
-        f"RAG search for '{query}' returned {len(clauses)} matching policy "
+        f"RAG search for '{query}' returned {internal_count} internal and {vendor_count} vendor matching policy "
         f"clauses (top similarity: {clauses[0]['similarity_score']:.4f})."
     )
 
