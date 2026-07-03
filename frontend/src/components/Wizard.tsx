@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { uploadPolicy, analyzeVendor } from '../api';
+import { uploadPolicy, runAnalysis } from '../api';
 import type { AnalysisResponse } from '../types';
-import { UploadCloud, Shield, CheckCircle2, Building, ChevronRight, Loader2, ArrowLeft } from 'lucide-react';
+import { UploadCloud, Shield, CheckCircle2, Building, ChevronRight, RefreshCw, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 interface WizardProps {
@@ -15,6 +15,7 @@ export const Wizard: React.FC<WizardProps> = ({ onAnalysisComplete }) => {
   const [vendorName, setVendorName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [progressMsg, setProgressMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setFile: React.Dispatch<React.SetStateAction<File | null>>) => {
@@ -50,14 +51,18 @@ export const Wizard: React.FC<WizardProps> = ({ onAnalysisComplete }) => {
     }
 
     setIsAnalyzing(true);
+    setProgressMsg("Booting multi-agent system...");
     setError(null);
     try {
-      const res = await analyzeVendor(vendorName);
+      const res = await runAnalysis(vendorName, undefined, (msg) => {
+        setProgressMsg(msg);
+      });
       onAnalysisComplete(res);
     } catch (err: any) {
       setError(err.message || "Analysis failed.");
     } finally {
       setIsAnalyzing(false);
+      setProgressMsg(null);
     }
   };
 
@@ -141,7 +146,7 @@ export const Wizard: React.FC<WizardProps> = ({ onAnalysisComplete }) => {
                   className="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-3 rounded-lg font-mono font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {isUploading ? (
-                    <><Loader2 className="animate-spin" size={18} /> INGESTING...</>
+                    <><RefreshCw className="animate-spin" size={18} /> INGESTING...</>
                   ) : (
                     <>PROCEED TO ANALYSIS <ChevronRight size={18} /></>
                   )}
@@ -177,12 +182,24 @@ export const Wizard: React.FC<WizardProps> = ({ onAnalysisComplete }) => {
                 <button
                   onClick={handleAnalyze}
                   disabled={!vendorName.trim() || isAnalyzing}
-                  className="bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-lg font-mono font-bold tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 shadow-[0_0_15px_rgba(220,38,38,0.4)]"
+                  className="bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-lg font-mono font-bold tracking-wider transition-all disabled:opacity-50 flex flex-col items-center justify-center min-w-[320px] shadow-[0_0_15px_rgba(220,38,38,0.4)]"
                 >
                   {isAnalyzing ? (
-                    <><Loader2 className="animate-spin" size={20} /> INITIATING COMPARATIVE ANALYSIS...</>
+                    <>
+                      <div className="flex items-center gap-3">
+                        <RefreshCw className="animate-spin" size={20} /> 
+                        <span>EXECUTING PIPELINE...</span>
+                      </div>
+                      {progressMsg && (
+                        <div className="text-[10px] text-red-200 mt-2 animate-pulse font-sans tracking-wide">
+                          {progressMsg}
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <>EXECUTE AUDIT</>
+                    <div className="flex items-center gap-3">
+                      EXECUTE AUDIT
+                    </div>
                   )}
                 </button>
               </div>

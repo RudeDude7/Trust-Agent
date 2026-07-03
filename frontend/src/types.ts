@@ -21,8 +21,9 @@ export interface ChatResponse {
 }
 
 export interface SavedAudit {
-  vendor: string;
-  timestamp: string;
+  vendor_name: string;
+  created_at: string;
   session_id: string;
-  data: RiskAssessment;
+  risk_assessment: RiskAssessment;
+  chat_history: { role: 'user' | 'agent', content: string }[];
 }

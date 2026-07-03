@@ -1,14 +1,14 @@
 import React from 'react';
-import type { AnalysisResponse } from '../types';
+import type { SavedAudit } from '../types';
 import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ResultsProps {
-  data: AnalysisResponse;
+  data: SavedAudit;
 }
 
 export const Results: React.FC<ResultsProps> = ({ data }) => {
-  const { risk_assessment, vendor } = data;
+  const { risk_assessment, vendor_name } = data;
   const isHighRisk = risk_assessment.overall_risk_level === 'HIGH' || risk_assessment.overall_risk_level === 'CRITICAL';
 
   return (
@@ -22,7 +22,7 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold font-mono tracking-tight flex items-center gap-3">
-              {vendor}
+              {vendor_name}
               {isHighRisk ? <ShieldAlert className="text-red-500" size={32} /> : <ShieldCheck className="text-emerald-500" size={32} />}
             </h1>
             <p className="mt-4 text-lg text-slate-300 leading-relaxed max-w-4xl">

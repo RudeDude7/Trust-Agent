@@ -5,21 +5,27 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import type { AnalysisResponse } from '../types';
+import type { SavedAudit } from '../types';
 
 interface ChatProps {
-  activeData: AnalysisResponse;
+  activeData: SavedAudit;
+  onUpdateHistory?: (newHistory: Message[]) => void;
 }
 
-interface Message {
+export interface Message {
   role: 'user' | 'agent';
   content: string;
 }
 
-export const Chat: React.FC<ChatProps> = ({ activeData }) => {
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'agent', content: 'Agent connected. Analysis context loaded. What would you like to know about this vendor?' }
-  ]);
+export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (activeData.chat_history && activeData.chat_history.length > 0) {
+      return activeData.chat_history;
+    }
+    return [
+      { role: 'agent', content: 'Agent connected. Analysis context loaded. What would you like to know about this vendor?' }
+    ];
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -41,18 +47,17 @@ export const Chat: React.FC<ChatProps> = ({ activeData }) => {
 
     const userMsg = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    const prevMessages = [...messages, { role: 'user', content: userMsg } as Message];
+    setMessages(prevMessages);
     setIsLoading(true);
 
     try {
-      // Exclude the very first static agent greeting from history, or include it if desired. 
-      // We will include it to maintain context of what the agent said first.
-      const historyPayload = messages.map(m => ({ role: m.role, content: m.content }));
-      
-      const contextStr = `OSINT Reconnaissance:\n${activeData.risk_assessment.osint_inferences.join('\n')}\n\nRAG Policy Discrepancies:\n${activeData.risk_assessment.rag_inferences.join('\n')}\n\nComparative Analysis:\n${activeData.risk_assessment.comparative_analysis}`;
-
-      const res = await sendChatMessage(activeData.vendor, contextStr, historyPayload, userMsg);
-      setMessages(prev => [...prev, { role: 'agent', content: res.response }]);
+      const res = await sendChatMessage(activeData.session_id, userMsg);
+      const updatedMessages: Message[] = [...prevMessages, { role: 'agent', content: res.response }];
+      setMessages(updatedMessages);
+      if (onUpdateHistory) {
+        onUpdateHistory(updatedMessages);
+      }
     } catch (err: any) {
       setMessages(prev => [...prev, { role: 'agent', content: `**[ERROR]:** ${err.message}` }]);
     } finally {

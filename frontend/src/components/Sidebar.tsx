@@ -1,11 +1,11 @@
 import React from 'react';
-import type { SavedAudit, AnalysisResponse } from '../types';
+import type { SavedAudit } from '../types';
 import { History, ShieldAlert, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SidebarProps {
   audits: SavedAudit[];
-  onSelectAudit: (audit: AnalysisResponse) => void;
+  onSelectAudit: (audit: SavedAudit) => void;
   activeSessionId: string | null;
 }
 
@@ -26,17 +26,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ audits, onSelectAudit, activeS
         ) : (
           audits.map((audit) => {
             const isActive = activeSessionId === audit.session_id;
-            const isHighRisk = audit.data.overall_risk_level === 'HIGH' || audit.data.overall_risk_level === 'CRITICAL';
+            const isHighRisk = audit.risk_assessment.overall_risk_level === 'HIGH' || audit.risk_assessment.overall_risk_level === 'CRITICAL';
             
             return (
               <button
                 key={audit.session_id}
-                onClick={() => onSelectAudit({
-                  status: 'success',
-                  vendor: audit.vendor,
-                  session_id: audit.session_id,
-                  risk_assessment: audit.data
-                })}
+                onClick={() => onSelectAudit(audit)}
                 className={clsx(
                   "w-full text-left p-3 rounded-md transition-all duration-200 flex items-center justify-between group",
                   isActive ? "bg-slate-800 shadow-inner" : "hover:bg-slate-800/50"
@@ -46,11 +41,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ audits, onSelectAudit, activeS
                   <div className="flex items-center gap-2">
                     {isHighRisk && <ShieldAlert size={14} className="text-red-500 flex-shrink-0" />}
                     <span className="font-mono text-sm font-semibold truncate text-slate-200 group-hover:text-cyan-400 transition-colors">
-                      {audit.vendor}
+                      {audit.vendor_name}
                     </span>
                   </div>
                   <span className="text-xs text-slate-500 font-mono">
-                    {new Date(audit.timestamp).toLocaleDateString()}
+                    {new Date(audit.created_at).toLocaleDateString()}
                   </span>
                 </div>
                 <ChevronRight size={14} className={clsx("text-slate-600 transition-transform", isActive ? "text-cyan-400 translate-x-1" : "group-hover:text-slate-400")} />

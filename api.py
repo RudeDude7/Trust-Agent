@@ -16,7 +16,9 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+import json
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -109,39 +111,127 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
     """
     log.info(f"Received analysis request for vendor: {request.vendor_name} by user {user_id}")
 
-    try:
-        initial_state: VendorDueDiligenceState = {  # type: ignore[typeddict-item]
-            "vendor_name": request.vendor_name,
-            "vendor_url": request.vendor_url or "",
+    async def event_generator():
+        try:
+            initial_state: VendorDueDiligenceState = {  # type: ignore[typeddict-item]
+                "vendor_name": request.vendor_name,
+                "vendor_url": request.vendor_url or "",
+            }
+
+            yield json.dumps({"type": "progress", "message": "Initializing analysis..."}) + "\n"
+
+            final_assessment = None
+            
+            # Stream events as nodes complete
+            async for event in graph_app.astream(initial_state, stream_mode="updates"):
+                for node_name, state_update in event.items():
+                    msg = "Processing..."
+                    if node_name == "osint_agent":
+                        msg = "[OSINT Agent] Completed web reconnaissance..."
+                    elif node_name == "rag_agent":
+                        msg = "[RAG Agent] Extracted policy discrepancies..."
+                    elif node_name == "judge_agent":
+                        msg = "[Judge Agent] Finalizing risk assessment..."
+                        final_assessment = state_update.get("risk_assessment")
+                        
+                    yield json.dumps({"type": "progress", "node": node_name, "message": msg}) + "\n"
+
+            if not final_assessment:
+                yield json.dumps({"type": "error", "message": "Pipeline completed but no risk assessment was generated."}) + "\n"
+                return
+
+            # Deduplication and Versioning Logic
+            db = get_supabase_client()
+            
+            # Fetch all past audits for this user and base vendor (like "Meta%")
+            base_vendor = request.vendor_name
+            # Remove any existing (vX) suffix if the user typed it
+            import re
+            base_vendor = re.sub(r'\s*\(v\d+\)$', '', base_vendor).strip()
+            
+            res = db.table("audits").select("session_id, vendor_name, risk_assessment").eq("user_id", user_id).ilike("vendor_name", f"{base_vendor}%").execute()
+            
+            existing_audits = res.data or []
+            
+            # Check for identical analysis
+            import json as json_lib
+            new_assessment_str = json_lib.dumps(final_assessment, sort_keys=True)
+            
+            identical_session = None
+            max_version = 0
+            
+            for audit in existing_audits:
+                v_name = audit["vendor_name"]
+                # Parse version number to keep track
+                match = re.search(r'\(v(\d+)\)$', v_name)
+                if match:
+                    max_version = max(max_version, int(match.group(1)))
+                elif v_name.lower() == base_vendor.lower():
+                    max_version = max(max_version, 1)
+                    
+                # Check for identical content
+                if json_lib.dumps(audit["risk_assessment"], sort_keys=True) == new_assessment_str:
+                    identical_session = audit["session_id"]
+            
+            if identical_session:
+                # If identical, just use the existing session and update its timestamp
+                # Note: Supabase doesn't easily let us update created_at via API if it's auto-generated,
+                # but we can return the existing session so it doesn't create duplicates.
+                # Actually, let's just return it. The frontend sorts by created_at natively? Yes.
+                # To push it to top, let's update chat_history (no-op) which updates modified_at if we had one,
+                # but we'll just return the session_id so frontend can open it.
+                yield json.dumps({
+                    "type": "complete",
+                    "vendor": request.vendor_name,
+                    "session_id": identical_session,
+                    "risk_assessment": final_assessment,
+                    "deduplicated": True
+                }) + "\n"
+                return
+
+            # If different, append a version tag if this vendor already exists
+            final_vendor_name = base_vendor
+            if max_version > 0:
+                final_vendor_name = f"{base_vendor} (v{max_version + 1})"
+                
+            session_id = str(uuid.uuid4())
+            
+            # Save to Supabase
+            db.table("audits").insert({
+                "session_id": session_id,
+                "user_id": user_id,
+                "vendor_name": final_vendor_name,
+                "risk_assessment": final_assessment,
+                "chat_history": []
+            }).execute()
+
+            yield json.dumps({
+                "type": "complete",
+                "vendor": final_vendor_name,
+                "session_id": session_id,
+                "risk_assessment": final_assessment
+            }) + "\n"
+
+        except Exception as e:
+            error_str = str(e)
+            log.error(f"Error during pipeline execution: {error_str}")
+            
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                friendly_detail = "Google AI Free Tier rate limit exceeded. Please wait about 30 seconds and try again."
+            else:
+                friendly_detail = "An unexpected error occurred while analyzing the vendor. Please try again."
+                
+            yield json.dumps({"type": "error", "message": friendly_detail}) + "\n"
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
         }
-
-        final_state = graph_app.invoke(initial_state)
-        assessment = final_state.get("risk_assessment")
-        if not assessment:
-            raise HTTPException(status_code=500, detail="Pipeline completed but no risk assessment was generated.")
-
-        session_id = str(uuid.uuid4())
-        
-        # Save to Supabase
-        db = get_supabase_client()
-        db.table("audits").insert({
-            "session_id": session_id,
-            "user_id": user_id,
-            "vendor_name": request.vendor_name,
-            "risk_assessment": assessment,
-            "chat_history": []
-        }).execute()
-
-        return {
-            "status": "success",
-            "vendor": request.vendor_name,
-            "session_id": session_id,
-            "risk_assessment": assessment
-        }
-
-    except Exception as e:
-        log.error(f"Error during pipeline execution: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -313,8 +403,16 @@ async def chat_endpoint(request: ChatRequest, user_id: str = Depends(get_current
     except HTTPException:
         raise
     except Exception as e:
-        log.error("Chat endpoint failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        error_str = str(e)
+        log.error("Chat endpoint failed: %s", error_str)
+        
+        # Translate raw LLM errors into friendly messages
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            friendly_detail = "I am currently experiencing high traffic (Google AI Rate Limit). Please wait 30 seconds and try asking again!"
+        else:
+            friendly_detail = "An unexpected system error occurred while generating a response. Please try again."
+            
+        raise HTTPException(status_code=500, detail=friendly_detail)
 
 
 
