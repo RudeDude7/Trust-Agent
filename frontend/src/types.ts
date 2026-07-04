@@ -38,3 +38,21 @@ export interface SavedAudit {
   risk_assessment: RiskAssessment;
   chat_history: { role: 'user' | 'agent', content: string }[];
 }
+
+export interface WatchedVendor {
+  vendor_name: string;
+  created_at: string;
+}
+
+export interface ThreatAlert {
+  id: string;
+  user_id: string;
+  vendor_name: string;
+  alert_title: string;
+  alert_summary: string;
+  source_url: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  is_read: boolean;
+  created_at: string;
+}
+

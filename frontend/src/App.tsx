@@ -6,12 +6,14 @@ import { Wizard } from './components/Wizard';
 import { Results } from './components/Results';
 import { Chat } from './components/Chat';
 import { Login } from './components/Login';
+import { LiveThreats } from './components/LiveThreats';
 import type { AnalysisResponse, SavedAudit } from './types';
-import { Shield } from 'lucide-react';
+import { Shield, Bell } from 'lucide-react';
 
 function App() {
   const [audits, setAudits] = useState<SavedAudit[]>([]);
   const [activeData, setActiveData] = useState<SavedAudit | null>(null);
+  const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
 
   const [session, setSession] = useState<any>(null);
   
@@ -57,6 +59,17 @@ function App() {
 
   const handleNewAudit = () => {
     setActiveData(null);
+    setIsThreatFeedOpen(false);
+  };
+
+  const handleSelectAudit = (audit: SavedAudit) => {
+    setActiveData(audit);
+    setIsThreatFeedOpen(false);
+  };
+
+  const handleOpenThreatFeed = () => {
+    setActiveData(null);
+    setIsThreatFeedOpen(true);
   };
 
   if (!session) {
@@ -67,15 +80,22 @@ function App() {
     <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-cyan-500/30">
       <Sidebar 
         audits={audits} 
-        onSelectAudit={setActiveData} 
+        onSelectAudit={handleSelectAudit} 
+        onOpenThreatFeed={handleOpenThreatFeed}
         activeSessionId={activeData?.session_id || null} 
+        isThreatFeedOpen={isThreatFeedOpen}
       />
       
       <main className="flex-1 relative flex flex-col h-full overflow-hidden">
         
         {/* Top Navbar for Context */}
         <div className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center shadow-md z-10">
-          {activeData ? (
+          {isThreatFeedOpen ? (
+            <h2 className="text-slate-300 font-mono tracking-widest text-sm flex items-center gap-2">
+              <Bell size={16} className="text-fuchsia-400" />
+              LIVE THREAT MONITOR
+            </h2>
+          ) : activeData ? (
             <h2 className="text-slate-300 font-mono tracking-widest text-sm flex items-center gap-2">
               <Shield size={16} className="text-cyan-400" />
               ANALYSIS MODE: {activeData.vendor_name.toUpperCase()}
@@ -104,7 +124,9 @@ function App() {
 
         {/* Content Area */}
         <div className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-background to-background">
-          {!activeData ? (
+          {isThreatFeedOpen ? (
+            <LiveThreats />
+          ) : !activeData ? (
             <Wizard onAnalysisComplete={handleAnalysisComplete} />
           ) : (
             <div className="h-full relative">

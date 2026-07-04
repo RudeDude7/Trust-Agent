@@ -1,17 +1,35 @@
 import React from 'react';
 import type { SavedAudit } from '../types';
-import { History, ShieldAlert, ChevronRight } from 'lucide-react';
+import { History, ShieldAlert, ChevronRight, Bell } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SidebarProps {
   audits: SavedAudit[];
   onSelectAudit: (audit: SavedAudit) => void;
+  onOpenThreatFeed: () => void;
   activeSessionId: string | null;
+  isThreatFeedOpen: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ audits, onSelectAudit, activeSessionId }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ audits, onSelectAudit, onOpenThreatFeed, activeSessionId, isThreatFeedOpen }) => {
   return (
     <div className="w-64 bg-slate-900 border-r border-slate-800 h-screen overflow-y-auto flex flex-col">
+      <div className="p-4 border-b border-slate-800">
+        <button
+          onClick={onOpenThreatFeed}
+          className={clsx(
+            "w-full flex items-center justify-between p-3 rounded-lg font-mono font-bold transition-all",
+            isThreatFeedOpen ? "bg-fuchsia-900/30 text-fuchsia-400 border border-fuchsia-500/50" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <Bell size={18} className={isThreatFeedOpen ? "text-fuchsia-500" : "text-slate-400"} />
+            Live Threats
+          </span>
+          <ChevronRight size={16} />
+        </button>
+      </div>
+      
       <div className="p-4 border-b border-slate-800">
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
           <History size={16} />

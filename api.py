@@ -649,6 +649,53 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
 
 
 # ============================================================
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 9: Phase 4 — Live Threat & Breach Feed
+# ═══════════════════════════════════════════════════════════════════════════
+
+class WatchVendorRequest(BaseModel):
+    vendor_name: str
+
+@app.post("/watch_vendor")
+async def watch_vendor(request: WatchVendorRequest, user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    try:
+        db.table("watched_vendors").insert({
+            "user_id": user_id,
+            "vendor_name": request.vendor_name
+        }).execute()
+        return {"status": "success", "message": f"Now watching {request.vendor_name}"}
+    except Exception as e:
+        log.warning(f"Failed to watch vendor: {e}")
+        return {"status": "success", "message": "Already watching"}
+
+@app.delete("/watch_vendor/{vendor_name}")
+async def unwatch_vendor(vendor_name: str, user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    db.table("watched_vendors").delete().eq("user_id", user_id).eq("vendor_name", vendor_name).execute()
+    return {"status": "success"}
+
+@app.get("/watched_vendors")
+async def get_watched_vendors(user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    res = db.table("watched_vendors").select("vendor_name, created_at").eq("user_id", user_id).execute()
+    return {"watched_vendors": res.data or []}
+
+@app.get("/threat_alerts")
+async def get_threat_alerts(user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    res = db.table("threat_alerts").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    return {"alerts": res.data or []}
+
+@app.post("/threat_alerts/{alert_id}/read")
+async def mark_alert_read(alert_id: str, user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    db.table("threat_alerts").update({"is_read": True}).eq("id", alert_id).eq("user_id", user_id).execute()
+    return {"status": "success"}
+
+
+# ============================================================
 # 🧠 Mentor Notes: Handling Files in Containers
 # ============================================================
 #

@@ -1,7 +1,7 @@
 import React from 'react';
 import type { SavedAudit } from '../types';
-import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Send, Loader, Copy, Check, ClipboardList } from 'lucide-react';
-import { generateRemediation } from '../api';
+import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Send, Loader, Copy, Check, ClipboardList, Eye, EyeOff } from 'lucide-react';
+import { generateRemediation, watchVendor, unwatchVendor, fetchWatchedVendors } from '../api';
 import { GapMatrix } from './GapMatrix';
 import { ExecutiveReport } from './ExecutiveReport';
 import { PolicySandbox } from './PolicySandbox';
@@ -19,6 +19,33 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
   const [remediationDraft, setRemediationDraft] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
+  const [isWatching, setIsWatching] = React.useState(false);
+  const [isWatchLoading, setIsWatchLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    fetchWatchedVendors().then(vendors => {
+      if (vendors.some(v => v.vendor_name === vendor_name)) {
+        setIsWatching(true);
+      }
+    }).catch(console.error);
+  }, [vendor_name]);
+
+  const handleToggleWatch = async () => {
+    try {
+      setIsWatchLoading(true);
+      if (isWatching) {
+        await unwatchVendor(vendor_name);
+        setIsWatching(false);
+      } else {
+        await watchVendor(vendor_name);
+        setIsWatching(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsWatchLoading(false);
+    }
+  };
 
   const handleGenerate = async () => {
     try {
@@ -67,7 +94,22 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
             )}>
               {risk_assessment.overall_risk_level}
             </span>
-            <span className="text-xs font-mono text-slate-500 mt-2">CONFIDENCE: {(risk_assessment.confidence_score * 100).toFixed(0)}%</span>
+            <span className="text-xs font-mono text-slate-500 mt-2 mb-4">CONFIDENCE: {(risk_assessment.confidence_score * 100).toFixed(0)}%</span>
+            
+            <button
+              onClick={handleToggleWatch}
+              disabled={isWatchLoading}
+              className={clsx(
+                "text-xs font-mono px-3 py-1.5 rounded flex items-center gap-2 transition-all border",
+                isWatching 
+                  ? "bg-fuchsia-900/30 text-fuchsia-400 border-fuchsia-500/50 hover:bg-fuchsia-900/50" 
+                  : "bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-300",
+                isWatchLoading && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              {isWatching ? <Eye size={14} /> : <EyeOff size={14} />}
+              {isWatching ? "WATCHING VENDOR" : "WATCH VENDOR"}
+            </button>
           </div>
         </div>
       </div>

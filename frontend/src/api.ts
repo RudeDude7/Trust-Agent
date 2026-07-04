@@ -196,3 +196,47 @@ export const evaluateSandbox = async (
   if (!res.ok) throw new Error(data.detail || 'Failed to run policy sandbox evaluation');
   return data.simulated_risk;
 };
+
+export const watchVendor = async (vendorName: string): Promise<void> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/watch_vendor`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ vendor_name: vendorName }),
+  });
+  if (!res.ok) throw new Error('Failed to watch vendor');
+};
+
+export const unwatchVendor = async (vendorName: string): Promise<void> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/watch_vendor/${encodeURIComponent(vendorName)}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to unwatch vendor');
+};
+
+export const fetchWatchedVendors = async (): Promise<any[]> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/watched_vendors`, { headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to fetch watched vendors');
+  return data.watched_vendors;
+};
+
+export const fetchThreatAlerts = async (): Promise<any[]> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/threat_alerts`, { headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to fetch threat alerts');
+  return data.alerts;
+};
+
+export const markAlertRead = async (alertId: string): Promise<void> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/threat_alerts/${alertId}/read`, {
+    method: 'POST',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to mark alert as read');
+};
