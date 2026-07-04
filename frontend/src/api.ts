@@ -123,6 +123,19 @@ export const sendChatMessage = async (
   return res.json();
 };
 
+export const generateRemediation = async (sessionId: string): Promise<string> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/generate_remediation`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ session_id: sessionId })
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to generate remediation draft');
+  return data.draft;
+};
+
 export const fetchAudits = async (): Promise<SavedAudit[]> => {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/audits`, {

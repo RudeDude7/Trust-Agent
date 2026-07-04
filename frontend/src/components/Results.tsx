@@ -1,6 +1,7 @@
 import React from 'react';
 import type { SavedAudit } from '../types';
-import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Send, Loader, Copy, Check } from 'lucide-react';
+import { generateRemediation } from '../api';
 import clsx from 'clsx';
 
 interface ResultsProps {
@@ -8,8 +9,34 @@ interface ResultsProps {
 }
 
 export const Results: React.FC<ResultsProps> = ({ data }) => {
-  const { risk_assessment, vendor_name } = data;
+  const { risk_assessment, vendor_name, session_id } = data;
   const isHighRisk = risk_assessment.overall_risk_level === 'HIGH' || risk_assessment.overall_risk_level === 'CRITICAL';
+
+  const [isGenerating, setIsGenerating] = React.useState(false);
+  const [remediationDraft, setRemediationDraft] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  const [generateError, setGenerateError] = React.useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    try {
+      setIsGenerating(true);
+      setGenerateError(null);
+      const draft = await generateRemediation(session_id);
+      setRemediationDraft(draft);
+    } catch (err: any) {
+      setGenerateError(err.message || 'Failed to generate draft');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (remediationDraft) {
+      navigator.clipboard.writeText(remediationDraft);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-y-auto bg-slate-900 p-8 text-slate-200">
@@ -42,15 +69,56 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* Synthesis / Comparative Analysis */}
-      <div className="mb-8">
-        <h2 className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-          <Target size={16} /> Synthesis & Comparative Analysis
-        </h2>
-        <div className="bg-slate-800/50 border border-cyan-900/50 rounded-xl p-6 text-slate-300 leading-relaxed">
-          {risk_assessment.comparative_analysis}
+      {/* Synthesis / Comparative Analysis & Remediation Action */}
+      <div className="mb-8 grid md:grid-cols-3 gap-6">
+        <div className="md:col-span-2">
+          <h2 className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+            <Target size={16} /> Synthesis & Comparative Analysis
+          </h2>
+          <div className="bg-slate-800/50 border border-cyan-900/50 rounded-xl p-6 text-slate-300 leading-relaxed h-full">
+            {risk_assessment.comparative_analysis}
+          </div>
+        </div>
+        <div className="md:col-span-1 flex flex-col justify-center">
+           <h2 className="text-sm font-mono font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+             Actionable Remediation
+           </h2>
+           <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-6 flex-1 flex flex-col items-center justify-center text-center gap-4">
+              <div className="text-slate-400 text-sm">
+                Generate a professional email addressed to the vendor's security team requesting remediation for the identified gaps.
+              </div>
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating || remediationDraft !== null}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGenerating ? <Loader className="animate-spin" size={18} /> : <Send size={18} />}
+                {isGenerating ? "DRAFTING..." : "GENERATE REQUEST"}
+              </button>
+              {generateError && <p className="text-red-400 text-xs mt-2">{generateError}</p>}
+           </div>
         </div>
       </div>
+
+      {/* Generated Draft View */}
+      {remediationDraft && (
+        <div className="mb-8 relative">
+           <div className="flex items-center justify-between mb-3">
+             <h2 className="text-sm font-mono font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                <FileText size={16} /> Remediation Email Draft
+             </h2>
+             <button onClick={handleCopy} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded flex items-center gap-1 font-mono text-slate-200 transition-colors">
+               {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+               {copied ? "COPIED!" : "COPY TO CLIPBOARD"}
+             </button>
+           </div>
+           <textarea
+             readOnly
+             className="w-full h-64 bg-slate-800 border border-indigo-500/30 rounded-xl p-6 text-slate-300 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed resize-y"
+             value={remediationDraft}
+           />
+        </div>
+      )}
 
       {/* Bifurcated Inferences */}
       <div className="grid md:grid-cols-2 gap-8 mb-8">

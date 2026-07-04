@@ -415,6 +415,72 @@ async def chat_endpoint(request: ChatRequest, user_id: str = Depends(get_current
         raise HTTPException(status_code=500, detail=friendly_detail)
 
 
+class RemediationRequest(BaseModel):
+    session_id: str
+
+@app.post("/generate_remediation")
+async def generate_remediation(request: RemediationRequest, user_id: str = Depends(get_current_user)):
+    """
+    Takes an existing audit session and generates a highly professional, 
+    actionable remediation email to the vendor citing the specific RAG/OSINT discrepancies.
+    """
+    try:
+        db = get_supabase_client()
+        
+        # Verify ownership and fetch data
+        res = db.table("audits").select("*").eq("session_id", request.session_id).eq("user_id", user_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Audit session not found")
+        
+        audit_data = res.data[0]
+        vendor_name = audit_data["vendor_name"]
+        risk = audit_data["risk_assessment"]
+        
+        # Format context for the LLM
+        osint = chr(10).join(f"- {i}" for i in risk.get('osint_inferences', []))
+        rag = chr(10).join(f"- {i}" for i in risk.get('rag_inferences', []))
+        gaps = chr(10).join(f"- {i}" for i in risk.get('data_gaps', []))
+        
+        prompt = f"""You are a Senior Vendor Security Analyst writing an actionable remediation request letter/email to the security team of a vendor named {vendor_name}.
+        
+Based on a recent technical risk review, we have identified the following discrepancies and concerns:
+
+RAG Policy Discrepancies (highest priority):
+{rag if rag else "None."}
+
+External/OSINT Security Concerns:
+{osint if osint else "None."}
+
+Information/Data Gaps (missing policies we need from them):
+{gaps if gaps else "None."}
+
+Your task:
+Draft a highly professional, structured, and polite email addressed to the {vendor_name} Security & Compliance Team.
+- Clearly and precisely state the discrepancies found.
+- Request clarification or proof of remediation for the identified deficiencies.
+- Request any missing documentation listed in the data gaps.
+- The tone must be strictly professional, corporate, and collaborative (not accusatory).
+- Do not include brackets like [Your Name], just sign off as "Vendor Security & Risk Management Team".
+- Output ONLY the email draft text. Do not include any meta-commentary.
+"""
+
+        # Call the LLM directly
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
+        response = llm.invoke(prompt)
+        
+        return {"status": "success", "draft": response.content}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_str = str(e)
+        log.error("Remediation generation failed: %s", error_str)
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            raise HTTPException(status_code=429, detail="AI Rate Limit Exceeded. Please try again in 30 seconds.")
+        raise HTTPException(status_code=500, detail="Failed to generate remediation draft.")
+
+
+
 
 # ============================================================
 # 🧠 Mentor Notes: Handling Files in Containers
