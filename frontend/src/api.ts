@@ -180,3 +180,19 @@ export const fetchGapActions = async (sessionId: string): Promise<GapAction[]> =
   if (!res.ok) throw new Error(data.detail || 'Failed to fetch gap actions');
   return data.gap_actions;
 };
+
+export const evaluateSandbox = async (
+  sessionId: string,
+  disabledClauses: string[]
+): Promise<RiskAssessment> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/sandbox_evaluate`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ session_id: sessionId, disabled_clauses: disabledClauses }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to run policy sandbox evaluation');
+  return data.simulated_risk;
+};

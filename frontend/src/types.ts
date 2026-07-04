@@ -15,6 +15,8 @@ export interface RiskAssessment {
   comparative_analysis: string;
   data_gaps: string[];
   gap_actions?: GapAction[];
+  raw_rag_clauses?: { clause_text: string; parent_context: string; role: string; source: string }[];
+  raw_osint_findings?: string[];
 }
 
 export interface AnalysisResponse {

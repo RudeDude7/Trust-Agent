@@ -4,6 +4,7 @@ import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Se
 import { generateRemediation } from '../api';
 import { GapMatrix } from './GapMatrix';
 import { ExecutiveReport } from './ExecutiveReport';
+import { PolicySandbox } from './PolicySandbox';
 import clsx from 'clsx';
 
 interface ResultsProps {
@@ -202,6 +203,11 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
           <ClipboardList size={16} /> Compliance Gap Matrix
         </h2>
         <GapMatrix data={data} />
+      </div>
+
+      {/* Policy Sandbox */}
+      <div className="mt-8 border-t border-slate-800 pt-8">
+        <PolicySandbox data={data} />
       </div>
 
     </div>

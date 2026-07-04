@@ -121,6 +121,8 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
             yield json.dumps({"type": "progress", "message": "Initializing analysis..."}) + "\n"
 
             final_assessment = None
+            raw_osint = []
+            raw_rag = []
             
             # Stream events as nodes complete
             async for event in graph_app.astream(initial_state, stream_mode="updates"):
@@ -128,8 +130,10 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
                     msg = "Processing..."
                     if node_name == "osint_agent":
                         msg = "[OSINT Agent] Completed web reconnaissance..."
+                        raw_osint = state_update.get("osint_findings", [])
                     elif node_name == "rag_agent":
                         msg = "[RAG Agent] Extracted policy discrepancies..."
+                        raw_rag = state_update.get("rag_clauses", [])
                     elif node_name == "judge_agent":
                         msg = "[Judge Agent] Finalizing risk assessment..."
                         final_assessment = state_update.get("risk_assessment")
@@ -139,6 +143,10 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
             if not final_assessment:
                 yield json.dumps({"type": "error", "message": "Pipeline completed but no risk assessment was generated."}) + "\n"
                 return
+
+            # Attach raw data for sandbox what-if analysis
+            final_assessment["raw_osint_findings"] = raw_osint
+            final_assessment["raw_rag_clauses"] = raw_rag
 
             # Deduplication and Versioning Logic
             db = get_supabase_client()
@@ -571,6 +579,73 @@ async def get_gap_actions(session_id: str, user_id: str = Depends(get_current_us
         log.error("Failed to fetch gap actions: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch gap actions.")
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 8: Policy Sandbox — "What-If" Analysis
+# ═══════════════════════════════════════════════════════════════════════════
+
+class SandboxRequest(BaseModel):
+    session_id: str
+    disabled_clauses: list[str]  # Exact clause texts to filter out
+
+
+@app.post("/sandbox_evaluate")
+async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_current_user)):
+    """
+    Re-runs the Judge Agent simulation by filtering out specific internal RAG 
+    clauses that the user has toggled off in the Policy Sandbox.
+    Does NOT save the result; just returns the simulated risk assessment.
+    """
+    try:
+        db = get_supabase_client()
+        res = db.table("audits").select("vendor_name, risk_assessment").eq("session_id", request.session_id).eq("user_id", user_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Audit session not found")
+
+        audit = res.data[0]
+        vendor_name = audit["vendor_name"]
+        risk = audit["risk_assessment"]
+
+        raw_osint = risk.get("raw_osint_findings", [])
+        raw_rag = risk.get("raw_rag_clauses", [])
+
+        if not raw_rag and not raw_osint:
+            raise HTTPException(status_code=400, detail="This audit is too old and lacks raw data for sandbox simulation. Please re-run the analysis first.")
+
+        # Filter out the disabled clauses
+        filtered_rag = []
+        for clause in raw_rag:
+            if clause.get("clause_text") not in request.disabled_clauses:
+                filtered_rag.append(clause)
+
+        # Re-run the judge agent
+        from state import VendorDueDiligenceState
+        from judge_agent import judge_agent_node
+
+        mock_state: VendorDueDiligenceState = {
+            "vendor_name": vendor_name,
+            "vendor_url": "",
+            "osint_findings": raw_osint,
+            "osint_summary": "",
+            "rag_clauses": filtered_rag,
+            "rag_query": "",
+            "rag_summary": "",
+            "risk_assessment": None,
+            "judge_reasoning": ""
+        }
+
+        result = judge_agent_node(mock_state)
+        simulated_risk = result.get("risk_assessment")
+        if not simulated_risk:
+            raise HTTPException(status_code=500, detail="Simulated judge agent returned no result.")
+
+        return {"status": "success", "simulated_risk": simulated_risk}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("Failed to run sandbox evaluation: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to run policy sandbox evaluation.")
 
 
 # ============================================================
