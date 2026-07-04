@@ -3,6 +3,7 @@ import type { SavedAudit } from '../types';
 import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Send, Loader, Copy, Check, ClipboardList } from 'lucide-react';
 import { generateRemediation } from '../api';
 import { GapMatrix } from './GapMatrix';
+import { ExecutiveReport } from './ExecutiveReport';
 import clsx from 'clsx';
 
 interface ResultsProps {
@@ -91,11 +92,19 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating || remediationDraft !== null}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-2"
               >
                 {isGenerating ? <Loader className="animate-spin" size={18} /> : <Send size={18} />}
                 {isGenerating ? "DRAFTING..." : "GENERATE REQUEST"}
               </button>
+              
+              <div className="w-full h-px bg-slate-700/50 my-1"></div>
+              
+              <div className="text-slate-400 text-sm mt-2">
+                Download a clean, CISO-ready PDF executive briefing summarizing these findings.
+              </div>
+              <ExecutiveReport data={data} />
+              
               {generateError && <p className="text-red-400 text-xs mt-2">{generateError}</p>}
            </div>
         </div>
