@@ -480,6 +480,97 @@ Draft a highly professional, structured, and polite email addressed to the {vend
         raise HTTPException(status_code=500, detail="Failed to generate remediation draft.")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 6 & 7: Compliance Gap Matrix — gap action tracking
+# ═══════════════════════════════════════════════════════════════════════════
+
+class GapStatusUpdate(BaseModel):
+    session_id: str
+    gap_index: int
+    category: str   # "osint" | "rag" | "data_gap"
+    status: str     # "open" | "accepted" | "remediation" | "exemption"
+    note: str = ""
+
+
+@app.post("/update_gap_status")
+async def update_gap_status(request: GapStatusUpdate, user_id: str = Depends(get_current_user)):
+    """
+    Persists a user's action (Accept / Remediate / Exempt) on a specific
+    compliance gap identified during analysis.
+    """
+    if request.status not in ("open", "accepted", "remediation", "exemption"):
+        raise HTTPException(status_code=400, detail="Status must be one of: open, accepted, remediation, exemption")
+    if request.category not in ("osint", "rag", "data_gap"):
+        raise HTTPException(status_code=400, detail="Category must be one of: osint, rag, data_gap")
+
+    try:
+        db = get_supabase_client()
+
+        # Fetch existing audit
+        res = db.table("audits").select("risk_assessment").eq("session_id", request.session_id).eq("user_id", user_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Audit session not found")
+
+        risk = res.data[0]["risk_assessment"]
+
+        # Initialize gap_actions array if it doesn't exist yet
+        gap_actions: list = risk.get("gap_actions", [])
+
+        # Find existing entry for this specific gap, or create a new one
+        existing_idx = None
+        for i, action in enumerate(gap_actions):
+            if action.get("gap_index") == request.gap_index and action.get("category") == request.category:
+                existing_idx = i
+                break
+
+        from datetime import datetime, timezone
+        action_entry = {
+            "gap_index": request.gap_index,
+            "category": request.category,
+            "status": request.status,
+            "note": request.note,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+
+        if existing_idx is not None:
+            gap_actions[existing_idx] = action_entry
+        else:
+            gap_actions.append(action_entry)
+
+        risk["gap_actions"] = gap_actions
+
+        # Write back
+        db.table("audits").update({"risk_assessment": risk}).eq("session_id", request.session_id).execute()
+
+        return {"status": "success", "gap_actions": gap_actions}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("Failed to update gap status: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update gap status.")
+
+
+@app.get("/gap_actions/{session_id}")
+async def get_gap_actions(session_id: str, user_id: str = Depends(get_current_user)):
+    """
+    Returns the current gap_actions array for a given audit session.
+    """
+    try:
+        db = get_supabase_client()
+        res = db.table("audits").select("risk_assessment").eq("session_id", session_id).eq("user_id", user_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Audit session not found")
+
+        risk = res.data[0]["risk_assessment"]
+        return {"status": "success", "gap_actions": risk.get("gap_actions", [])}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("Failed to fetch gap actions: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch gap actions.")
+
 
 
 # ============================================================

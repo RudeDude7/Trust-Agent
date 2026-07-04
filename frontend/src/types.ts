@@ -1,3 +1,11 @@
+export interface GapAction {
+  gap_index: number;
+  category: 'osint' | 'rag' | 'data_gap';
+  status: 'open' | 'accepted' | 'remediation' | 'exemption';
+  note: string;
+  updated_at: string;
+}
+
 export interface RiskAssessment {
   overall_risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   confidence_score: number;
@@ -6,6 +14,7 @@ export interface RiskAssessment {
   rag_inferences: string[];
   comparative_analysis: string;
   data_gaps: string[];
+  gap_actions?: GapAction[];
 }
 
 export interface AnalysisResponse {

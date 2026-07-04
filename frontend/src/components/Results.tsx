@@ -1,7 +1,8 @@
 import React from 'react';
 import type { SavedAudit } from '../types';
-import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Send, Loader, Copy, Check } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Activity, FileText, Target, AlertTriangle, Send, Loader, Copy, Check, ClipboardList } from 'lucide-react';
 import { generateRemediation } from '../api';
+import { GapMatrix } from './GapMatrix';
 import clsx from 'clsx';
 
 interface ResultsProps {
@@ -185,6 +186,14 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
           </div>
         </div>
       )}
+
+      {/* Interactive Compliance Gap Matrix */}
+      <div className="mt-8 border-t border-slate-800 pt-8">
+        <h2 className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2 mb-6">
+          <ClipboardList size={16} /> Compliance Gap Matrix
+        </h2>
+        <GapMatrix data={data} />
+      </div>
 
     </div>
   );

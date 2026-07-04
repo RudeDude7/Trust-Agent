@@ -1,4 +1,4 @@
-import type { AnalysisResponse, SavedAudit, ChatResponse } from './types';
+import type { AnalysisResponse, SavedAudit, ChatResponse, GapAction } from './types';
 import { supabase } from './supabase';
 
 const API_BASE = 'https://rudedude7-trust-agent.hf.space';
@@ -149,4 +149,34 @@ export const fetchAudits = async (): Promise<SavedAudit[]> => {
   
   const data = await res.json();
   return data.audits || [];
+};
+
+export const updateGapStatus = async (
+  sessionId: string,
+  gapIndex: number,
+  category: 'osint' | 'rag' | 'data_gap',
+  status: 'open' | 'accepted' | 'remediation' | 'exemption',
+  note: string = ''
+): Promise<GapAction[]> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/update_gap_status`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ session_id: sessionId, gap_index: gapIndex, category, status, note }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to update gap status');
+  return data.gap_actions;
+};
+
+export const fetchGapActions = async (sessionId: string): Promise<GapAction[]> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/gap_actions/${sessionId}`, {
+    headers,
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to fetch gap actions');
+  return data.gap_actions;
 };
