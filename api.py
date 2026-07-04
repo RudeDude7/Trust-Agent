@@ -679,20 +679,33 @@ async def unwatch_vendor(vendor_name: str, user_id: str = Depends(get_current_us
 @app.get("/watched_vendors")
 async def get_watched_vendors(user_id: str = Depends(get_current_user)):
     db = get_supabase_client()
-    res = db.table("watched_vendors").select("vendor_name, created_at").eq("user_id", user_id).execute()
-    return {"watched_vendors": res.data or []}
+    try:
+        res = db.table("watched_vendors").select("vendor_name, created_at").eq("user_id", user_id).execute()
+        return {"watched_vendors": res.data or []}
+    except Exception as e:
+        log.error(f"Failed to fetch watched vendors: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch watched vendors. Did you run the SQL migration?")
 
 @app.get("/threat_alerts")
 async def get_threat_alerts(user_id: str = Depends(get_current_user)):
     db = get_supabase_client()
-    res = db.table("threat_alerts").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-    return {"alerts": res.data or []}
+    try:
+        res = db.table("threat_alerts").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return {"alerts": res.data or []}
+    except Exception as e:
+        log.error(f"Failed to fetch threat alerts: {e}")
+        # Return a clean JSON 500 error instead of letting FastAPI crash
+        raise HTTPException(status_code=500, detail="Failed to fetch threat alerts. Did you run the SQL migration for Phase 4?")
 
 @app.post("/threat_alerts/{alert_id}/read")
 async def mark_alert_read(alert_id: str, user_id: str = Depends(get_current_user)):
     db = get_supabase_client()
-    db.table("threat_alerts").update({"is_read": True}).eq("id", alert_id).eq("user_id", user_id).execute()
-    return {"status": "success"}
+    try:
+        db.table("threat_alerts").update({"is_read": True}).eq("id", alert_id).eq("user_id", user_id).execute()
+        return {"status": "success"}
+    except Exception as e:
+        log.error(f"Failed to mark alert as read: {e}")
+        raise HTTPException(status_code=500, detail="Failed to mark alert as read.")
 
 
 # ============================================================
