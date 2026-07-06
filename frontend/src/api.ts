@@ -1,9 +1,6 @@
 import type { AnalysisResponse, SavedAudit, ChatResponse, GapAction } from './types';
 import { supabase } from './supabase';
-
-const API_BASE = 'https://rudedude7-trust-agent.hf.space';
-
-// Helper to get auth headers
+const API_BASE = 'http://localhost:8000';
 async function getAuthHeaders() {
   const { data } = await supabase.auth.getSession();
   if (!data.session) throw new Error('Not authenticated');
@@ -151,18 +148,28 @@ export const fetchAudits = async (): Promise<SavedAudit[]> => {
   return data.audits || [];
 };
 
+export const deleteAudit = async (sessionId: string): Promise<void> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/audits/${sessionId}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to delete audit');
+};
+
 export const updateGapStatus = async (
   sessionId: string,
   gapIndex: number,
   category: 'osint' | 'rag' | 'data_gap',
   status: 'open' | 'accepted' | 'remediation' | 'exemption',
-  note: string = ''
+  note: string = '',
+  assignedTo: string | null = null
 ): Promise<GapAction[]> => {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/update_gap_status`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ session_id: sessionId, gap_index: gapIndex, category, status, note }),
+    body: JSON.stringify({ session_id: sessionId, gap_index: gapIndex, category, status, note, assigned_to: assignedTo }),
   });
 
   const data = await res.json();
@@ -239,4 +246,33 @@ export const markAlertRead = async (alertId: string): Promise<void> => {
     headers,
   });
   if (!res.ok) throw new Error('Failed to mark alert as read');
+};
+
+export const fetchEmployees = async (): Promise<any[]> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/employees`, { headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to fetch employees');
+  return data.employees;
+};
+
+export const addEmployee = async (name: string, position: string): Promise<any> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/employees`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name, position }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Failed to add employee');
+  return data;
+};
+
+export const deleteEmployee = async (employeeId: string): Promise<void> => {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/employees/${employeeId}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to delete employee');
 };

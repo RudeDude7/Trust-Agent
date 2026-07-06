@@ -16,8 +16,8 @@ import logging
 import re
 from typing import Any
 
-from ddgs import DDGS
-from ddgs.exceptions import DDGSException, RatelimitException
+from duckduckgo_search import DDGS
+from duckduckgo_search.exceptions import DuckDuckGoSearchException as DDGSException, RatelimitException
 
 from state import OSINTFinding, VendorDueDiligenceState
 

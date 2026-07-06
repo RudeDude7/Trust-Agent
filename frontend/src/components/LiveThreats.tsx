@@ -1,17 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldAlert, AlertTriangle, AlertCircle, Info, ExternalLink, Check, Bell } from 'lucide-react';
 import type { ThreatAlert } from '../types';
-import { fetchThreatAlerts, markAlertRead } from '../api';
+import { fetchThreatAlerts, markAlertRead, fetchWatchedVendors, unwatchVendor } from '../api';
+import { X } from 'lucide-react';
 import clsx from 'clsx';
 
 export const LiveThreats: React.FC = () => {
   const [alerts, setAlerts] = useState<ThreatAlert[]>([]);
+  const [watchedVendors, setWatchedVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAlerts();
+    loadWatchedVendors();
   }, []);
+
+  const loadWatchedVendors = async () => {
+    try {
+      const data = await fetchWatchedVendors();
+      setWatchedVendors(data);
+    } catch (err) {
+      console.error('Failed to load watched vendors', err);
+    }
+  };
+
+  const handleUnwatch = async (vendorName: string) => {
+    try {
+      await unwatchVendor(vendorName);
+      setWatchedVendors(prev => prev.filter(v => v.vendor_name !== vendorName));
+    } catch (err) {
+      console.error('Failed to unwatch', err);
+    }
+  };
 
   const loadAlerts = async () => {
     try {
@@ -45,17 +66,17 @@ export const LiveThreats: React.FC = () => {
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'CRITICAL': return 'bg-red-500/10 text-red-500 border-red-500/20';
-      case 'HIGH': return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-      case 'MEDIUM': return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
-      default: return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+      case 'CRITICAL': return 'bg-red-50 text-red-600 border-red-200';
+      case 'HIGH': return 'bg-orange-50 text-orange-600 border-orange-200';
+      case 'MEDIUM': return 'bg-amber-50 text-amber-600 border-amber-200';
+      default: return 'bg-blue-50 text-blue-600 border-blue-200';
     }
   };
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-slate-950">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fuchsia-500"></div>
+      <div className="flex-1 flex items-center justify-center bg-stone-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-600"></div>
       </div>
     );
   }
@@ -63,72 +84,74 @@ export const LiveThreats: React.FC = () => {
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-950 p-8 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
+    <div className="flex-1 flex flex-col h-full p-8 overflow-y-auto w-full max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-3xl font-bold font-mono text-slate-200 tracking-tight flex items-center gap-3">
-            <Bell className="text-fuchsia-500" size={28} />
+          <h1 className="text-3xl font-bold font-heading text-stone-900 tracking-tight flex items-center gap-3">
+            <Bell className="text-accent-600" size={28} />
             Live Threat & Breach Feed
           </h1>
-          <p className="text-slate-400 mt-2">Continuous OSINT monitoring for your watched vendors.</p>
+          <p className="text-stone-500 mt-2 text-lg">Continuous OSINT monitoring for your watched vendors.</p>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-lg px-4 py-2 flex items-center gap-3">
-          <div className="text-slate-400 text-sm">Unread Alerts</div>
-          <div className="text-2xl font-black text-fuchsia-500">{unreadCount}</div>
+        <div className="bg-white border border-stone-200 rounded-xl px-5 py-3 flex items-center gap-4 shadow-sm">
+          <div className="text-stone-500 font-semibold text-sm uppercase tracking-wider">Unread Alerts</div>
+          <div className="text-3xl font-heading font-bold text-accent-600">{unreadCount}</div>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-400 text-sm">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-8 text-red-600 font-medium">
           {error}
         </div>
       )}
 
-      {alerts.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
-          <ShieldCheck size={48} className="mb-4 opacity-50" />
-          <p className="text-lg font-mono">No Active Threats Detected</p>
-          <p className="text-sm mt-2 max-w-md text-center">
-            Your watched vendors are currently clear of recent data breaches or major security incidents.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-4">
+      <div className="grid md:grid-cols-4 gap-8">
+        <div className="md:col-span-3">
+          {alerts.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-stone-400 border-2 border-dashed border-stone-200 rounded-3xl p-16 bg-white">
+              <ShieldCheck size={48} className="mb-4 text-stone-300" />
+              <p className="text-xl font-heading font-bold text-stone-500">No Active Threats Detected</p>
+              <p className="text-sm mt-2 max-w-md text-center text-stone-400">
+                Your watched vendors are currently clear of recent data breaches or major security incidents.
+              </p>
+            </div>
+          ) : (
+        <div className="space-y-6">
           {alerts.map(alert => (
             <div 
               key={alert.id} 
               className={clsx(
-                "relative overflow-hidden rounded-xl border p-6 transition-all",
+                "relative overflow-hidden rounded-2xl border p-6 transition-all shadow-soft",
                 alert.is_read 
-                  ? "bg-slate-900/50 border-slate-800 opacity-60" 
-                  : "bg-slate-900 border-slate-700 shadow-lg"
+                  ? "bg-stone-50 border-stone-200 opacity-60" 
+                  : "bg-white border-stone-200 hover:shadow-soft-lg hover:-translate-y-0.5"
               )}
             >
               {/* Unread indicator strip */}
               {!alert.is_read && (
-                <div className="absolute left-0 top-0 bottom-0 w-1 bg-fuchsia-500"></div>
+                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-accent-500"></div>
               )}
               
-              <div className="flex items-start justify-between gap-6">
+              <div className="flex items-start justify-between gap-6 pl-2">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-3 mb-4">
                     {getSeverityIcon(alert.severity)}
-                    <span className="text-slate-200 font-bold tracking-tight">
+                    <span className="text-stone-900 font-bold tracking-tight">
                       {alert.vendor_name}
                     </span>
-                    <span className={clsx("text-xs font-mono px-2 py-0.5 rounded border uppercase", getSeverityColor(alert.severity))}>
+                    <span className={clsx("text-[10px] font-bold px-2.5 py-1 rounded-md border uppercase tracking-widest", getSeverityColor(alert.severity))}>
                       {alert.severity} SEVERITY
                     </span>
-                    <span className="text-xs text-slate-500 font-mono">
+                    <span className="text-xs text-stone-400 font-medium">
                       {new Date(alert.created_at).toLocaleString()}
                     </span>
                   </div>
                   
-                  <h3 className={clsx("text-lg font-semibold mb-2", alert.is_read ? "text-slate-300" : "text-white")}>
+                  <h3 className={clsx("text-xl font-heading font-bold mb-3", alert.is_read ? "text-stone-600" : "text-stone-900")}>
                     {alert.alert_title}
                   </h3>
                   
-                  <p className="text-slate-400 text-sm leading-relaxed mb-4">
+                  <p className="text-stone-600 text-sm leading-relaxed mb-5">
                     {alert.alert_summary}
                   </p>
                   
@@ -138,7 +161,7 @@ export const LiveThreats: React.FC = () => {
                         href={alert.source_url} 
                         target="_blank" 
                         rel="noreferrer"
-                        className="text-fuchsia-400 hover:text-fuchsia-300 text-sm flex items-center gap-1 transition-colors"
+                        className="text-accent-600 hover:text-accent-700 font-semibold text-sm flex items-center gap-1.5 transition-colors bg-accent-50 hover:bg-accent-100 px-3 py-1.5 rounded-lg"
                       >
                         Read Source Article <ExternalLink size={14} />
                       </a>
@@ -150,17 +173,55 @@ export const LiveThreats: React.FC = () => {
                   {!alert.is_read && (
                     <button 
                       onClick={() => handleMarkRead(alert.id)}
-                      className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded flex items-center gap-1 transition-colors border border-slate-700"
+                      className="text-xs font-semibold bg-white hover:bg-stone-50 text-stone-600 px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors border border-stone-200 shadow-sm"
                     >
-                      <Check size={14} /> Mark as Read
+                      <Check size={14} className="text-emerald-500" /> Mark as Read
                     </button>
                   )}
                 </div>
               </div>
             </div>
           ))}
+          </div>
+        )}
         </div>
-      )}
+
+        <div className="md:col-span-1">
+          <div className="bg-white border border-stone-200 rounded-3xl overflow-hidden shadow-soft sticky top-8">
+            <div className="bg-stone-50 p-5 border-b border-stone-200">
+              <h3 className="font-bold text-stone-600 text-sm uppercase tracking-widest flex items-center justify-between">
+                Watched Vendors
+                <span className="bg-accent-100 text-accent-700 font-bold text-xs px-2.5 py-0.5 rounded-full">
+                  {watchedVendors.length}
+                </span>
+              </h3>
+            </div>
+            
+            {watchedVendors.length === 0 ? (
+              <div className="p-8 text-center text-stone-400 text-sm font-medium italic">
+                No vendors being monitored.
+              </div>
+            ) : (
+              <div className="divide-y divide-stone-100 max-h-[500px] overflow-y-auto">
+                {watchedVendors.map(v => (
+                  <div key={v.vendor_name} className="p-4 flex items-center justify-between hover:bg-stone-50 transition-colors group">
+                    <span className="text-stone-700 font-semibold text-sm truncate pr-2">
+                      {v.vendor_name}
+                    </span>
+                    <button 
+                      onClick={() => handleUnwatch(v.vendor_name)}
+                      className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 shadow-sm border border-transparent hover:border-red-100"
+                      title="Stop Watching"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

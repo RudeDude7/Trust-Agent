@@ -24,7 +24,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import uuid
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from main import build_graph
@@ -69,17 +68,21 @@ app.add_middleware(
 security = HTTPBearer()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    """Verifies the Supabase JWT token and extracts the user_id."""
+    """Verifies the Supabase JWT token and extracts the user_id, with retries for network timeouts."""
     token = credentials.credentials
     db = get_supabase_client()
-    try:
-        res = db.auth.get_user(token)
-        if not res or not res.user:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-        return res.user.id
-    except Exception as e:
-        log.error("Authentication failed: %s", e)
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    import time
+    for attempt in range(3):
+        try:
+            res = db.auth.get_user(token)
+            if not res or not res.user:
+                raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+            return res.user.id
+        except Exception as e:
+            if attempt == 2:
+                log.error("Authentication failed after 3 attempts: %s", e)
+                raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+            time.sleep(0.5)
 
 # ---------------------------------------------------------------------------
 # Startup: Compile the graph and warm up heavy models once
@@ -161,9 +164,16 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
             
             existing_audits = res.data or []
             
-            # Check for identical analysis
+            # Check for identical raw findings (ignore Judge Agent LLM variations)
             import json as json_lib
-            new_assessment_str = json_lib.dumps(final_assessment, sort_keys=True)
+            
+            def get_raw_fingerprint(assessment):
+                return json_lib.dumps({
+                    "osint": assessment.get("raw_osint_findings", []),
+                    "rag": assessment.get("raw_rag_clauses", [])
+                }, sort_keys=True)
+
+            new_raw_fingerprint = get_raw_fingerprint(final_assessment)
             
             identical_session = None
             max_version = 0
@@ -177,8 +187,8 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
                 elif v_name.lower() == base_vendor.lower():
                     max_version = max(max_version, 1)
                     
-                # Check for identical content
-                if json_lib.dumps(audit["risk_assessment"], sort_keys=True) == new_assessment_str:
+                # Check for identical raw content
+                if get_raw_fingerprint(audit["risk_assessment"]) == new_raw_fingerprint:
                     identical_session = audit["session_id"]
             
             if identical_session:
@@ -498,6 +508,7 @@ class GapStatusUpdate(BaseModel):
     category: str   # "osint" | "rag" | "data_gap"
     status: str     # "open" | "accepted" | "remediation" | "exemption"
     note: str = ""
+    assigned_to: str | None = None
 
 
 @app.post("/update_gap_status")
@@ -537,6 +548,7 @@ async def update_gap_status(request: GapStatusUpdate, user_id: str = Depends(get
             "category": request.category,
             "status": request.status,
             "note": request.note,
+            "assigned_to": request.assigned_to,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
@@ -686,6 +698,26 @@ async def get_watched_vendors(user_id: str = Depends(get_current_user)):
         log.error(f"Failed to fetch watched vendors: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch watched vendors. Did you run the SQL migration?")
 
+
+
+@app.delete("/audits/{session_id}")
+async def delete_audit(session_id: str, user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    try:
+        # First verify the audit belongs to the user
+        audit_check = db.table("audits").select("session_id").eq("session_id", session_id).eq("user_id", user_id).execute()
+        if not audit_check.data:
+            raise HTTPException(status_code=404, detail="Audit not found")
+
+        # Delete the audit itself. Child tables like chat_messages or gap_actions do not exist (they are JSONB columns).
+        db.table("audits").delete().eq("session_id", session_id).eq("user_id", user_id).execute()
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to delete audit: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete audit.")
+
 @app.get("/threat_alerts")
 async def get_threat_alerts(user_id: str = Depends(get_current_user)):
     db = get_supabase_client()
@@ -707,44 +739,48 @@ async def mark_alert_read(alert_id: str, user_id: str = Depends(get_current_user
         log.error(f"Failed to mark alert as read: {e}")
         raise HTTPException(status_code=500, detail="Failed to mark alert as read.")
 
+# ============================================================
+# Phase 5: Employees / Team Management
+# ============================================================
 
-# ============================================================
-# 🧠 Mentor Notes: Handling Files in Containers
-# ============================================================
-#
-# WHY THE `finally` BLOCK IS NON-NEGOTIABLE
-# ──────────────────────────────────────────
-# Our backend runs inside ephemeral containers (Hugging Face Spaces,
-# Google Cloud Run). These environments have critical constraints:
-#
-# 1. LIMITED DISK SPACE
-#    Container filesystems are typically 1–10 GB. Unlike your MacBook,
-#    there is no garbage collection daemon cleaning up after you.
-#    Every file you write stays until *you* delete it or the container
-#    is destroyed and re-created.
-#
-# 2. PERSISTENT ACROSS REQUESTS
-#    A single container instance handles many sequential requests.
-#    If each request saves a 5 MB PDF and forgets to delete it,
-#    after 200 requests you've consumed 1 GB of disk. After 2000
-#    requests, you've crashed the container with ENOSPC.
-#
-# 3. CRASH-SAFE CLEANUP
-#    The `try/finally` pattern guarantees the temp file is removed
-#    even if the embedding model throws an OOM error, Supabase
-#    times out, or any other exception occurs mid-pipeline.
-#    Without `finally`, an exception in Stage 3 would skip the
-#    cleanup code and leak the file permanently.
-#
-# 4. WHY NOT `delete=True` IN NamedTemporaryFile?
-#    With `delete=True`, the file is deleted when the file handle
-#    closes. But our pipeline needs to *re-open* the file via
-#    PyPDFLoader (which takes a file path, not a handle). If we
-#    let the context manager delete it on close, the loader would
-#    find an empty path. So we use `delete=False` and manage the
-#    lifecycle ourselves in `finally`.
-#
-# TLDR: In containers, treat disk like RAM — allocate carefully,
-# free explicitly, and never assume someone else will clean up.
-# ============================================================
+class EmployeeCreate(BaseModel):
+    name: str
+    position: str
+
+@app.get("/employees")
+async def get_employees(user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    try:
+        res = db.table("employees").select("*").eq("user_id", user_id).order("created_at").execute()
+        return {"employees": res.data or []}
+    except Exception as e:
+        log.error(f"Failed to fetch employees: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch employees.")
+
+@app.post("/employees")
+async def create_employee(emp: EmployeeCreate, user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    try:
+        res = db.table("employees").insert({
+            "user_id": user_id,
+            "name": emp.name,
+            "position": emp.position
+        }).execute()
+        return res.data[0]
+    except Exception as e:
+        log.error(f"Failed to create employee: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create employee.")
+
+@app.delete("/employees/{employee_id}")
+async def delete_employee(employee_id: str, user_id: str = Depends(get_current_user)):
+    db = get_supabase_client()
+    try:
+        db.table("employees").delete().eq("id", employee_id).eq("user_id", user_id).execute()
+        return {"status": "success"}
+    except Exception as e:
+        log.error(f"Failed to delete employee: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete employee.")
+
+
+# Ensure temp file cleanup in ephemeral environments to prevent disk leaks.
 

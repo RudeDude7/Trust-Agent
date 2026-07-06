@@ -17,7 +17,7 @@ def test_supabase_connection() -> bool:
         return False
         
     try:
-        supabase: Client = create_client(url, key)
+        create_client(url, key)
         print("[Success] Supabase client initialized.")
         return True
     except Exception as e:

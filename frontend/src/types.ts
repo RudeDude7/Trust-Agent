@@ -1,8 +1,16 @@
+export interface Employee {
+  id: string;
+  name: string;
+  position: string;
+  created_at?: string;
+}
+
 export interface GapAction {
   gap_index: number;
   category: 'osint' | 'rag' | 'data_gap';
   status: 'open' | 'accepted' | 'remediation' | 'exemption';
   note: string;
+  assigned_to?: string | null;
   updated_at: string;
 }
 

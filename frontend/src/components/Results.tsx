@@ -22,22 +22,23 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
   const [isWatching, setIsWatching] = React.useState(false);
   const [isWatchLoading, setIsWatchLoading] = React.useState(false);
 
+  // Strip (vX) or other version tags from the vendor name for watching
+  const baseVendorName = vendor_name.replace(/\s*\(.*\)\s*/g, '').trim();
+
   React.useEffect(() => {
     fetchWatchedVendors().then(vendors => {
-      if (vendors.some(v => v.vendor_name === vendor_name)) {
-        setIsWatching(true);
-      }
+      setIsWatching(vendors.some(v => v.vendor_name === baseVendorName));
     }).catch(console.error);
-  }, [vendor_name]);
+  }, [baseVendorName]);
 
   const handleToggleWatch = async () => {
     try {
       setIsWatchLoading(true);
       if (isWatching) {
-        await unwatchVendor(vendor_name);
+        await unwatchVendor(baseVendorName);
         setIsWatching(false);
       } else {
-        await watchVendor(vendor_name);
+        await watchVendor(baseVendorName);
         setIsWatching(true);
       }
     } catch (err) {
@@ -69,126 +70,128 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-slate-900 p-8 text-slate-200">
+    <div className="flex flex-col p-8 gap-8 text-stone-800 min-h-full max-w-6xl mx-auto w-full pb-32">
       
       {/* Header Panel */}
       <div className={clsx(
-        "rounded-xl border p-6 mb-8 shadow-lg",
-        isHighRisk ? "bg-red-900/10 border-red-500/50" : "bg-emerald-900/10 border-emerald-500/50"
+        "rounded-3xl border p-8 shadow-soft",
+        isHighRisk ? "bg-red-50/50 border-red-200" : "bg-emerald-50/50 border-emerald-200"
       )}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold font-mono tracking-tight flex items-center gap-3">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold font-heading tracking-tight flex items-center gap-3 text-stone-900">
               {vendor_name}
               {isHighRisk ? <ShieldAlert className="text-red-500" size={32} /> : <ShieldCheck className="text-emerald-500" size={32} />}
             </h1>
-            <p className="mt-4 text-lg text-slate-300 leading-relaxed max-w-4xl">
+            <p className="mt-4 text-lg text-stone-600 leading-relaxed max-w-4xl">
               {risk_assessment.summary}
             </p>
           </div>
-          <div className="text-right flex flex-col items-end">
-            <span className="text-sm font-mono text-slate-500 uppercase tracking-widest mb-1">Risk Level</span>
+          <div className="text-right flex flex-col items-end shrink-0">
+            <span className="text-sm font-semibold text-stone-500 uppercase tracking-widest mb-1">Risk Level</span>
             <span className={clsx(
-              "text-4xl font-black tracking-tighter",
-              isHighRisk ? "text-red-500" : "text-emerald-500"
+              "text-5xl font-heading font-bold tracking-tighter",
+              isHighRisk ? "text-red-600" : "text-emerald-600"
             )}>
               {risk_assessment.overall_risk_level}
             </span>
-            <span className="text-xs font-mono text-slate-500 mt-2 mb-4">CONFIDENCE: {(risk_assessment.confidence_score * 100).toFixed(0)}%</span>
+            <span className="text-xs font-semibold text-stone-400 mt-2 mb-4 bg-stone-100 px-2 py-1 rounded-md">CONFIDENCE: {(risk_assessment.confidence_score * 100).toFixed(0)}%</span>
             
             <button
               onClick={handleToggleWatch}
               disabled={isWatchLoading}
               className={clsx(
-                "text-xs font-mono px-3 py-1.5 rounded flex items-center gap-2 transition-all border",
+                "text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all border shadow-sm",
                 isWatching 
-                  ? "bg-fuchsia-900/30 text-fuchsia-400 border-fuchsia-500/50 hover:bg-fuchsia-900/50" 
-                  : "bg-slate-800/50 text-slate-400 border-slate-700 hover:bg-slate-700 hover:text-slate-300",
+                  ? "bg-accent-50 text-accent-700 border-accent-200 hover:bg-accent-100" 
+                  : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50 hover:text-stone-800",
                 isWatchLoading && "opacity-50 cursor-not-allowed"
               )}
             >
-              {isWatching ? <Eye size={14} /> : <EyeOff size={14} />}
-              {isWatching ? "WATCHING VENDOR" : "WATCH VENDOR"}
+              {isWatching ? <Eye size={16} /> : <EyeOff size={16} />}
+              {isWatching ? "Watching" : "Watch Vendor"}
             </button>
           </div>
         </div>
       </div>
 
       {/* Synthesis / Comparative Analysis & Remediation Action */}
-      <div className="mb-8 grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2">
-          <h2 className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-            <Target size={16} /> Synthesis & Comparative Analysis
+      <div className="grid md:grid-cols-3 gap-8 items-stretch">
+        <div className="md:col-span-2 flex flex-col h-full bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+          <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <Target size={18} /> Synthesis & Comparative Analysis
           </h2>
-          <div className="bg-slate-800/50 border border-cyan-900/50 rounded-xl p-6 text-slate-300 leading-relaxed h-full">
+          <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6 text-stone-700 leading-relaxed flex-1">
             {risk_assessment.comparative_analysis}
           </div>
         </div>
-        <div className="md:col-span-1 flex flex-col justify-center">
-           <h2 className="text-sm font-mono font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+        <div className="md:col-span-1 flex flex-col h-full justify-start bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+           <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2 mb-4">
              Actionable Remediation
            </h2>
-           <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-6 flex-1 flex flex-col items-center justify-center text-center gap-4">
-              <div className="text-slate-400 text-sm">
-                Generate a professional email addressed to the vendor's security team requesting remediation for the identified gaps.
+           <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6 flex-1 flex flex-col items-center justify-center text-center gap-5">
+              <div className="text-stone-500 text-sm">
+                Generate a professional email addressed to the vendor's security team requesting remediation.
               </div>
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating || remediationDraft !== null}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-2"
+                className="w-full bg-stone-800 hover:bg-stone-900 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {isGenerating ? <Loader className="animate-spin" size={18} /> : <Send size={18} />}
-                {isGenerating ? "DRAFTING..." : "GENERATE REQUEST"}
+                {isGenerating ? "Drafting..." : "Generate Request"}
               </button>
               
-              <div className="w-full h-px bg-slate-700/50 my-1"></div>
+              <div className="w-full h-px bg-stone-200 my-2"></div>
               
-              <div className="text-slate-400 text-sm mt-2">
+              <div className="text-stone-500 text-sm">
                 Download a clean, CISO-ready PDF executive briefing summarizing these findings.
               </div>
-              <ExecutiveReport data={data} />
+              <div className="w-full">
+                <ExecutiveReport data={data} />
+              </div>
               
-              {generateError && <p className="text-red-400 text-xs mt-2">{generateError}</p>}
+              {generateError && <p className="text-red-500 text-xs mt-2">{generateError}</p>}
            </div>
         </div>
       </div>
 
       {/* Generated Draft View */}
       {remediationDraft && (
-        <div className="mb-8 relative">
-           <div className="flex items-center justify-between mb-3">
-             <h2 className="text-sm font-mono font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                <FileText size={16} /> Remediation Email Draft
+        <div className="bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+           <div className="flex items-center justify-between mb-4">
+             <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2">
+                <FileText size={18} /> Remediation Email Draft
              </h2>
-             <button onClick={handleCopy} className="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded flex items-center gap-1 font-mono text-slate-200 transition-colors">
-               {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-               {copied ? "COPIED!" : "COPY TO CLIPBOARD"}
+             <button onClick={handleCopy} className="text-xs bg-stone-100 hover:bg-stone-200 px-4 py-2 rounded-xl flex items-center gap-2 font-semibold text-stone-700 transition-colors shadow-sm">
+               {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+               {copied ? "Copied!" : "Copy to Clipboard"}
              </button>
            </div>
            <textarea
              readOnly
-             className="w-full h-64 bg-slate-800 border border-indigo-500/30 rounded-xl p-6 text-slate-300 focus:outline-none focus:border-indigo-500 font-sans leading-relaxed resize-y"
+             className="w-full h-64 bg-stone-50 border border-stone-200 rounded-2xl p-6 text-stone-700 focus:outline-none focus:border-accent-500 font-sans leading-relaxed resize-y"
              value={remediationDraft}
            />
         </div>
       )}
 
       {/* Bifurcated Inferences */}
-      <div className="grid md:grid-cols-2 gap-8 mb-8">
+      <div className="grid md:grid-cols-2 gap-8">
         
         {/* OSINT Panel */}
-        <div className="flex flex-col h-full">
-          <h2 className="text-sm font-mono font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 mb-3">
-            <Activity size={16} /> External Recon (OSINT)
+        <div className="flex flex-col h-full bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+          <h2 className="text-sm font-semibold text-orange-500 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <Activity size={18} /> External Recon (OSINT)
           </h2>
-          <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-6 flex-1">
+          <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6 flex-1">
             {risk_assessment.osint_inferences.length === 0 ? (
-              <p className="text-slate-500 italic text-sm">No significant external risks found.</p>
+              <p className="text-stone-400 italic text-sm">No significant external risks found.</p>
             ) : (
               <ul className="space-y-4">
                 {risk_assessment.osint_inferences.map((inf, idx) => (
-                  <li key={idx} className="flex gap-3 text-sm text-slate-300">
-                    <span className="text-amber-500 font-mono mt-0.5">[{idx + 1}]</span>
+                  <li key={idx} className="flex gap-3 text-sm text-stone-700">
+                    <span className="text-orange-500 font-semibold mt-0.5">[{idx + 1}]</span>
                     <span>{inf}</span>
                   </li>
                 ))}
@@ -198,18 +201,18 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
         </div>
 
         {/* RAG Panel */}
-        <div className="flex flex-col h-full">
-          <h2 className="text-sm font-mono font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-            <FileText size={16} /> Policy Comparison (RAG)
+        <div className="flex flex-col h-full bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+          <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <FileText size={18} /> Policy Comparison (RAG)
           </h2>
-          <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-6 flex-1">
+          <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6 flex-1">
             {risk_assessment.rag_inferences.length === 0 ? (
-              <p className="text-slate-500 italic text-sm">No policy discrepancies identified.</p>
+              <p className="text-stone-400 italic text-sm">No policy discrepancies identified.</p>
             ) : (
               <ul className="space-y-4">
                 {risk_assessment.rag_inferences.map((inf, idx) => (
-                  <li key={idx} className="flex gap-3 text-sm text-slate-300">
-                    <span className="text-indigo-400 font-mono mt-0.5">[{idx + 1}]</span>
+                  <li key={idx} className="flex gap-3 text-sm text-stone-700">
+                    <span className="text-accent-600 font-semibold mt-0.5">[{idx + 1}]</span>
                     <span>{inf}</span>
                   </li>
                 ))}
@@ -222,15 +225,15 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
 
       {/* Data Gaps */}
       {risk_assessment.data_gaps.length > 0 && (
-        <div>
-          <h2 className="text-sm font-mono font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-3">
-            <AlertTriangle size={16} /> Intelligence Gaps
+        <div className="bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+          <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-widest flex items-center gap-2 mb-4">
+            <AlertTriangle size={18} /> Intelligence Gaps
           </h2>
-          <div className="bg-slate-800/20 border border-slate-800 rounded-xl p-6">
+          <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6">
             <ul className="space-y-2">
               {risk_assessment.data_gaps.map((gap, idx) => (
-                <li key={idx} className="flex gap-2 text-sm text-slate-400">
-                  <span className="text-slate-600">-</span>
+                <li key={idx} className="flex gap-2 text-sm text-stone-600">
+                  <span className="text-stone-400">-</span>
                   {gap}
                 </li>
               ))}
@@ -240,15 +243,15 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
       )}
 
       {/* Interactive Compliance Gap Matrix */}
-      <div className="mt-8 border-t border-slate-800 pt-8">
-        <h2 className="text-sm font-mono font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2 mb-6">
-          <ClipboardList size={16} /> Compliance Gap Matrix
+      <div className="bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
+        <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2 mb-6">
+          <ClipboardList size={18} /> Compliance Gap Matrix
         </h2>
         <GapMatrix data={data} />
       </div>
 
       {/* Policy Sandbox */}
-      <div className="mt-8 border-t border-slate-800 pt-8">
+      <div className="bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
         <PolicySandbox data={data} />
       </div>
 

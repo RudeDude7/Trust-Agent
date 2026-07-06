@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { SavedAudit, GapAction } from '../types';
 import { Download, Loader } from 'lucide-react';
-
 interface ExecutiveReportProps {
   data: SavedAudit;
 }
@@ -24,38 +23,52 @@ const RiskDial: React.FC<{ level: string; confidence: number }> = ({ level, conf
   const color = RISK_COLORS[level] || '#94a3b8';
   const angle = RISK_ANGLES[level] ?? 0;
 
-  return (
-    <svg viewBox="0 0 200 120" width="200" height="120" style={{ display: 'block', margin: '0 auto' }}>
-      {/* Background arc */}
-      <path
-        d="M 20 100 A 80 80 0 0 1 180 100"
-        fill="none"
-        stroke="#334155"
-        strokeWidth="14"
-        strokeLinecap="round"
-      />
-      {/* Colored segments */}
-      <path d="M 20 100 A 80 80 0 0 1 55 35" fill="none" stroke="#10b981" strokeWidth="14" strokeLinecap="round" />
-      <path d="M 55 35 A 80 80 0 0 1 100 20" fill="none" stroke="#f59e0b" strokeWidth="14" strokeLinecap="round" />
-      <path d="M 100 20 A 80 80 0 0 1 145 35" fill="none" stroke="#ef4444" strokeWidth="14" strokeLinecap="round" />
-      <path d="M 145 35 A 80 80 0 0 1 180 100" fill="none" stroke="#dc2626" strokeWidth="14" strokeLinecap="round" />
-      {/* Needle */}
-      <line
-        x1="100"
-        y1="100"
-        x2={100 + 55 * Math.cos(((angle - 90) * Math.PI) / 180)}
-        y2={100 + 55 * Math.sin(((angle - 90) * Math.PI) / 180)}
-        stroke={color}
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle cx="100" cy="100" r="6" fill={color} />
-      {/* Label */}
-      <text x="100" y="115" textAnchor="middle" fontSize="11" fontWeight="bold" fill={color} fontFamily="monospace">
-        {level}
-      </text>
-    </svg>
-  );
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  React.useEffect(() => {
+    const svgString = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+        <!-- Background arc -->
+        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#334155" stroke-width="14" stroke-linecap="round" />
+        <!-- Colored segments -->
+        <path d="M 20 100 A 80 80 0 0 1 55 35" fill="none" stroke="#10b981" stroke-width="14" stroke-linecap="round" />
+        <path d="M 55 35 A 80 80 0 0 1 100 20" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" />
+        <path d="M 100 20 A 80 80 0 0 1 145 35" fill="none" stroke="#ef4444" stroke-width="14" stroke-linecap="round" />
+        <path d="M 145 35 A 80 80 0 0 1 180 100" fill="none" stroke="#dc2626" stroke-width="14" stroke-linecap="round" />
+        <!-- Needle -->
+        <line
+          x1="100"
+          y1="100"
+          x2="${100 + 55 * Math.cos(((angle - 90) * Math.PI) / 180)}"
+          y2="${100 + 55 * Math.sin(((angle - 90) * Math.PI) / 180)}"
+          stroke="${color}"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+        <circle cx="100" cy="100" r="6" fill="${color}" />
+        <!-- Label -->
+        <text x="100" y="115" text-anchor="middle" font-size="11" font-weight="bold" fill="${color}" font-family="monospace">
+          ${level}
+        </text>
+      </svg>
+    `;
+
+    const dataUri = `data:image/svg+xml;base64,${btoa(svgString.trim())}`;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = dataUri;
+  }, [level, confidence, color, angle]);
+
+  return <canvas ref={canvasRef} width={200} height={120} style={{ display: 'block', margin: '0 auto' }} />;
 };
 
 export const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ data }) => {
@@ -82,18 +95,52 @@ export const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ data }) => {
     setIsExporting(true);
 
     try {
-      // Dynamic import to avoid SSR issues
-      const html2pdf = (await import('html2pdf.js')).default;
+      // Dynamically load the script to avoid bundler issues
+      if (!(window as any).html2pdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('Failed to load html2pdf.js'));
+          document.body.appendChild(script);
+        });
+      }
 
+      const html2pdf = (window as any).html2pdf;
+      const defaultFilename = `Trust_Agent_Executive_Briefing_${vendor_name.replace(/\s+/g, '_')}.pdf`;
+      
       const opt = {
         margin: [10, 10, 10, 10],
-        filename: `Trust_Agent_Executive_Briefing_${vendor_name.replace(/\s+/g, '_')}.pdf`,
+        filename: defaultFilename,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
       };
 
-      await html2pdf().set(opt).from(reportRef.current).save();
+      if ('showSaveFilePicker' in window) {
+        const pdfBlob = await html2pdf().set(opt).from(reportRef.current).output('blob');
+        try {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: defaultFilename,
+            types: [{
+              description: 'PDF Document',
+              accept: { 'application/pdf': ['.pdf'] }
+            }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(pdfBlob);
+          await writable.close();
+        } catch (pickerErr: any) {
+          if (pickerErr.name !== 'AbortError') {
+            throw pickerErr;
+          }
+        }
+      } else {
+        // Fallback: Open PDF in a new tab so the user can choose "Save As" via the browser's PDF viewer
+        const pdfBlob = await html2pdf().set(opt).from(reportRef.current).output('blob');
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        window.open(blobUrl, '_blank');
+      }
     } catch (err) {
       console.error('PDF export failed:', err);
     } finally {
@@ -107,10 +154,10 @@ export const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ data }) => {
       <button
         onClick={handleExport}
         disabled={isExporting}
-        className="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
       >
         {isExporting ? <Loader className="animate-spin" size={18} /> : <Download size={18} />}
-        {isExporting ? 'GENERATING PDF...' : 'EXPORT EXECUTIVE BRIEFING'}
+        {isExporting ? 'Generating PDF...' : 'Export Executive Briefing'}
       </button>
 
       {/* Hidden Report Layout (rendered off-screen for html2pdf) */}

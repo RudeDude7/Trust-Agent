@@ -59,68 +59,68 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-background selection:bg-cyan-500/30">
-      <div className="w-full max-w-md p-8 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl animate-in fade-in zoom-in-95">
-        <div className="flex flex-col items-center gap-3 justify-center mb-8">
-          <div className="p-4 bg-slate-800 rounded-full border border-slate-700 shadow-inner">
-            <Shield size={40} className="text-cyan-400" />
+    <div className="flex h-screen w-full items-center justify-center bg-stone-50 selection:bg-accent-500/30">
+      <div className="w-full max-w-md p-10 bg-white border border-stone-200 rounded-3xl shadow-soft-xl animate-in fade-in zoom-in-95">
+        <div className="flex flex-col items-center gap-3 justify-center mb-10">
+          <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 shadow-sm">
+            <Shield size={40} className="text-accent-600" />
           </div>
-          <h1 className="text-2xl font-mono text-slate-100 font-bold tracking-tight mt-2">TRUST AGENT</h1>
-          <p className="text-slate-500 text-sm font-mono tracking-widest uppercase">Secure Authentication</p>
+          <h1 className="text-3xl font-heading text-stone-900 font-black tracking-tight mt-3">Trust Agent</h1>
+          <p className="text-stone-500 text-sm font-semibold tracking-widest uppercase">Secure Authentication</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
+        <form onSubmit={handleAuth} className="space-y-5">
           <div>
-            <label className="block text-xs font-mono text-slate-400 mb-1">EMAIL</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-2">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 focus:outline-none focus:border-cyan-500 font-sans transition-colors"
+              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 font-sans transition-all shadow-inner"
               required
               placeholder="agent@example.com"
             />
           </div>
           <div>
-            <label className="block text-xs font-mono text-slate-400 mb-1">PASSWORD</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500 mb-2">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-slate-200 focus:outline-none focus:border-cyan-500 font-sans transition-colors"
+              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 font-sans transition-all shadow-inner"
               required
               placeholder="••••••••"
             />
           </div>
 
           {isSignUp && (
-            <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-2 text-xs font-mono">
-              <div className="text-slate-400 mb-2 font-semibold">PASSWORD REQUIREMENTS</div>
-              <div className={clsx("flex items-center gap-2", password.length >= 8 ? "text-emerald-400" : "text-slate-500")}>
-                {password.length >= 8 ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-5 space-y-3 text-sm font-medium shadow-sm">
+              <div className="text-stone-500 mb-2 font-bold uppercase tracking-wider text-xs">Password Requirements</div>
+              <div className={clsx("flex items-center gap-2.5", password.length >= 8 ? "text-emerald-600 font-bold" : "text-stone-400")}>
+                {password.length >= 8 ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                 At least 8 characters
               </div>
-              <div className={clsx("flex items-center gap-2", /[A-Z]/.test(password) ? "text-emerald-400" : "text-slate-500")}>
-                {/[A-Z]/.test(password) ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+              <div className={clsx("flex items-center gap-2.5", /[A-Z]/.test(password) ? "text-emerald-600 font-bold" : "text-stone-400")}>
+                {/[A-Z]/.test(password) ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                 One uppercase letter
               </div>
-              <div className={clsx("flex items-center gap-2", /[a-z]/.test(password) ? "text-emerald-400" : "text-slate-500")}>
-                {/[a-z]/.test(password) ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+              <div className={clsx("flex items-center gap-2.5", /[a-z]/.test(password) ? "text-emerald-600 font-bold" : "text-stone-400")}>
+                {/[a-z]/.test(password) ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                 One lowercase letter
               </div>
-              <div className={clsx("flex items-center gap-2", /[0-9]/.test(password) ? "text-emerald-400" : "text-slate-500")}>
-                {/[0-9]/.test(password) ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+              <div className={clsx("flex items-center gap-2.5", /[0-9]/.test(password) ? "text-emerald-600 font-bold" : "text-stone-400")}>
+                {/[0-9]/.test(password) ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                 One number
               </div>
-              <div className={clsx("flex items-center gap-2", /[^A-Za-z0-9]/.test(password) ? "text-emerald-400" : "text-slate-500")}>
-                {/[^A-Za-z0-9]/.test(password) ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+              <div className={clsx("flex items-center gap-2.5", /[^A-Za-z0-9]/.test(password) ? "text-emerald-600 font-bold" : "text-stone-400")}>
+                {/[^A-Za-z0-9]/.test(password) ? <CheckCircle2 size={16} /> : <Circle size={16} />}
                 One special symbol
               </div>
             </div>
           )}
 
           {error && (
-            <div className="p-3 bg-red-900/20 border border-red-900/50 rounded text-red-400 text-sm font-mono text-center">
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-semibold text-center">
               {error}
             </div>
           )}
@@ -128,20 +128,20 @@ export const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-mono font-bold tracking-wider py-3 rounded-lg transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+            className="w-full bg-accent-600 hover:bg-accent-700 text-white font-bold uppercase tracking-widest py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 mt-4 disabled:opacity-50 shadow-sm"
           >
-            {loading && <Loader2 size={16} className="animate-spin" />}
+            {loading && <Loader2 size={18} className="animate-spin" />}
             {isSignUp ? 'REGISTER' : 'LOGIN'}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-8 text-center">
           <button
             onClick={() => {
               setIsSignUp(!isSignUp);
               setError(null);
             }}
-            className="text-sm font-mono text-slate-500 hover:text-cyan-400 transition-colors"
+            className="text-sm font-semibold text-stone-500 hover:text-accent-600 transition-colors"
           >
             {isSignUp ? 'Already have an account? Login' : "Don't have an account? Register"}
           </button>

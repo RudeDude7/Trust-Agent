@@ -104,44 +104,7 @@ if __name__ == "__main__":
     main()
 
 
-# ============================================================
-# 🧠 Mentor Notes — Why Two Tables?
-# ============================================================
-#
-# In a standard (flat) RAG system you embed and retrieve the SAME chunk.
-# That forces a painful trade-off:
-#
-#   • Small chunks (≈200 tokens) → great embedding precision,
-#     but the LLM receives tiny, context-starved snippets.
-#
-#   • Large chunks (≈1 000 tokens) → the LLM gets rich context,
-#     but the embedding is a diluted average of too many ideas,
-#     so similarity search becomes noisier.
-#
-# The Parent Document Retriever eliminates this trade-off by
-# DECOUPLING retrieval from grounding:
-#
-#   1. SEARCH happens on the small child chunks (document_chunks table).
-#      Their embeddings are tight and semantically focused, so cosine
-#      similarity gives you the most relevant hits.
-#
-#   2. GROUNDING happens on the parent chunks (documents table).
-#      Once you find the best child, you follow the foreign key
-#      (document_id) back to the parent and send THAT larger chunk
-#      to the LLM.  The model now sees surrounding context — headings,
-#      qualifiers, adjacent clauses — that a 200-token fragment would
-#      have lost.
-#
-# That's why the SQL schema has two tables with a FK relationship:
-#
-#   documents  ←──  document_chunks
-#   (grounding)     (search / embeddings)
-#
-# Think of it like a book index:
-#   • The INDEX entries (child chunks) help you find the right page fast.
-#   • But you read the full PAGE (parent chunk), not the index entry.
-#
-# This architecture gives you the best of both worlds:
-#   ✓  High retrieval precision (small, dense embeddings)
-#   ✓  High answer quality     (large, context-rich grounding)
-# ============================================================
+# Note on Architecture:
+# We decouple retrieval from grounding to avoid the small/large chunk trade-off.
+#   1. Small child chunks (document_chunks table) provide tight, semantically focused embeddings for cosine similarity.
+#   2. Large parent chunks (documents table) provide rich surrounding context to the LLM.

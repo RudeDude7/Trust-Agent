@@ -86,49 +86,5 @@ if __name__ == "__main__":
     print("=" * 70 + "\n")
 
 
-# ============================================================
-# 🧠 Mentor Notes: Graph Compilation
-# ============================================================
-#
-# WHAT IS workflow.compile()?
-# ───────────────────────────
-# When we build our graph using `workflow.add_node()` and
-# `workflow.add_edge()`, we are just building a blueprint. We
-# are telling LangGraph how the nodes connect, but we aren't
-# creating an executable program yet.
-#
-# `app = workflow.compile()` takes that blueprint and "freezes" it
-# into a Runnable. Under the hood, compilation does several things:
-#
-# 1. Validation: It checks that the graph has no dead ends. It ensures
-#    every path eventually leads to the special `END` node, and that
-#    the `START` node is properly connected.
-# 2. State Mapping: It injects the state management machinery. It ensures
-#    that when Node A returns `{"rag_clauses": [x]}`, the state reducers
-#    (like `operator.add`) are triggered to correctly merge the data.
-# 3. Checkpointing (Optional): If we pass a `checkpointer` to compile
-#    (e.g., `workflow.compile(checkpointer=memory)`), this is where
-#    LangGraph hooks into SQLite/Postgres to save the state snapshot
-#    after EVERY single node executes. This allows "time-travel"
-#    debugging and human-in-the-loop approvals.
-#
-#
-# SEQUENTIAL VS PARALLEL
-# ──────────────────────
-# Right now, our flow is:
-#     START → OSINT → RAG → JUDGE → END
-#
-# This is simple and easy to debug. But notice that OSINT and RAG don't
-# actually depend on each other — they only depend on `vendor_name` from
-# the initial state.
-#
-# LangGraph natively supports parallel execution. If we simply changed
-# our edges to:
-#     workflow.add_edge(START, "osint_agent")
-#     workflow.add_edge(START, "rag_agent")
-#     workflow.add_edge(["osint_agent", "rag_agent"], "judge_agent")
-#
-# LangGraph would run the OSINT web searches AND the RAG vector searches
-# at the exact same time, cutting our pipeline latency in half, before
-# waiting for both to finish and passing the merged state to the Judge.
-# ============================================================
+# Compilation validates the graph, maps state reducers, and prepares the Runnable.
+# Note: For lower latency, OSINT and RAG could run in parallel since they don't depend on each other.

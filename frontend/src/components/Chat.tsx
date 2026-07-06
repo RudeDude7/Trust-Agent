@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage } from '../api';
-import { Terminal, Send, MessageSquare } from 'lucide-react';
+import { Terminal, Send, MessageSquare, X } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -69,7 +69,7 @@ export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-cyan-600 hover:bg-cyan-500 text-white p-4 rounded-full shadow-2xl transition-transform hover:scale-110 flex items-center gap-2"
+        className="fixed bottom-6 right-6 bg-accent-600 hover:bg-accent-700 text-white p-4 rounded-full shadow-soft-lg transition-transform hover:-translate-y-1 flex items-center gap-2 z-50"
       >
         <MessageSquare size={24} />
       </button>
@@ -77,31 +77,31 @@ export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 w-96 max-h-[600px] h-[70vh] flex flex-col bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-8">
+    <div className="fixed bottom-6 right-6 w-96 max-h-[600px] h-[70vh] flex flex-col bg-white border border-stone-200 rounded-3xl shadow-soft-lg overflow-hidden animate-in slide-in-from-bottom-8 z-50">
       
       {/* Header */}
-      <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center cursor-pointer" onClick={() => setIsOpen(false)}>
-        <h3 className="font-mono text-cyan-400 font-bold flex items-center gap-2 text-sm">
-          <Terminal size={16} />
-          ASK TRUST AGENT
+      <div className="bg-stone-50 p-5 border-b border-stone-200 flex justify-between items-center cursor-pointer" onClick={() => setIsOpen(false)}>
+        <h3 className="font-heading font-bold text-accent-700 flex items-center gap-2 text-sm">
+          <Terminal size={18} />
+          Trust Agent
         </h3>
-        <button className="text-slate-500 hover:text-slate-300 transition-colors">
-          &times;
+        <button className="text-stone-400 hover:text-stone-700 transition-colors bg-white hover:bg-stone-100 rounded-full p-1 shadow-sm border border-stone-200">
+          <X size={14} />
         </button>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-5 scroll-smooth bg-white custom-scrollbar">
         {messages.map((msg, idx) => (
           <div key={idx} className={clsx("flex flex-col max-w-[85%]", msg.role === 'user' ? "ml-auto" : "mr-auto")}>
-            <span className={clsx("text-[10px] font-mono mb-1 tracking-widest uppercase", msg.role === 'user' ? "text-slate-500 text-right" : "text-cyan-500/50")}>
-              {msg.role}
+            <span className={clsx("text-[10px] font-semibold mb-1 tracking-widest uppercase", msg.role === 'user' ? "text-stone-400 text-right" : "text-accent-500/70")}>
+              {msg.role === 'user' ? 'You' : 'Agent'}
             </span>
             <div className={clsx(
-              "p-3 rounded-xl text-sm leading-relaxed font-sans",
+              "p-4 rounded-2xl text-sm leading-relaxed font-sans shadow-sm border",
               msg.role === 'user' 
-                ? "bg-cyan-700 text-white border border-cyan-600 rounded-br-none ml-auto text-right" 
-                : "bg-slate-800 text-slate-200 border border-slate-700/50 rounded-bl-none shadow-sm"
+                ? "bg-stone-800 text-white border-stone-900 rounded-br-sm ml-auto text-right" 
+                : "bg-stone-50 text-stone-700 border-stone-200 rounded-bl-sm"
             )}>
               {msg.role === 'agent' ? (
                 <ReactMarkdown 
@@ -110,8 +110,8 @@ export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
                     p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
                     ul: ({node, ...props}) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                     ol: ({node, ...props}) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
-                    strong: ({node, ...props}) => <strong className="font-semibold text-cyan-300" {...props} />,
-                    a: ({node, ...props}) => <a className="text-cyan-400 hover:underline" {...props} />
+                    strong: ({node, ...props}) => <strong className="font-semibold text-accent-700" {...props} />,
+                    a: ({node, ...props}) => <a className="text-accent-600 hover:underline font-medium" {...props} />
                   }}
                 >
                   {msg.content}
@@ -124,12 +124,12 @@ export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
         ))}
         {isLoading && (
           <div className="flex flex-col max-w-[85%] mr-auto">
-             <span className="text-[10px] font-mono mb-1 tracking-widest uppercase text-cyan-500/50">agent is typing...</span>
-             <div className="p-4 bg-slate-800 border border-slate-700/50 rounded-xl rounded-bl-none flex items-center shadow-sm w-fit">
+             <span className="text-[10px] font-semibold mb-1 tracking-widest uppercase text-accent-500/70">Agent is typing...</span>
+             <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl rounded-bl-sm flex items-center shadow-sm w-fit">
                 <div className="flex space-x-1.5 items-center justify-center">
-                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-accent-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-accent-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-1.5 h-1.5 bg-accent-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                 </div>
              </div>
           </div>
@@ -137,7 +137,7 @@ export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-slate-800 border-t border-slate-700">
+      <div className="p-4 bg-white border-t border-stone-200">
         <div className="flex gap-2">
           <input
             type="text"
@@ -145,16 +145,16 @@ export const Chat: React.FC<ChatProps> = ({ activeData, onUpdateHistory }) => {
             disabled={isLoading}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder={isLoading ? "Agent is typing..." : "Query analysis data..."}
-            className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder={isLoading ? "Agent is thinking..." : "Ask a question..."}
+            className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm text-stone-800 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 font-sans disabled:opacity-50 disabled:cursor-not-allowed shadow-inner"
             autoFocus
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="bg-accent-600 hover:bg-accent-700 text-white p-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
           >
-            <Send size={18} className={clsx(isLoading ? "opacity-50" : "")} />
+            <Send size={18} className={clsx(isLoading ? "opacity-50" : "ml-0.5")} />
           </button>
         </div>
       </div>

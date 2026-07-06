@@ -3,14 +3,18 @@
 -- Run this in your Supabase SQL Editor
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS watched_vendors (
+-- Drop the tables in case they were previously created with a different schema
+DROP TABLE IF EXISTS threat_alerts CASCADE;
+DROP TABLE IF EXISTS watched_vendors CASCADE;
+
+CREATE TABLE watched_vendors (
     user_id UUID NOT NULL,
     vendor_name TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, vendor_name)
 );
 
-CREATE TABLE IF NOT EXISTS threat_alerts (
+CREATE TABLE threat_alerts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
     vendor_name TEXT NOT NULL,
@@ -23,4 +27,4 @@ CREATE TABLE IF NOT EXISTS threat_alerts (
 );
 
 -- Index for quick lookups
-CREATE INDEX IF NOT EXISTS idx_threat_alerts_user ON threat_alerts(user_id, is_read);
+CREATE INDEX idx_threat_alerts_user ON threat_alerts(user_id, is_read);

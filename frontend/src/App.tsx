@@ -7,6 +7,7 @@ import { Results } from './components/Results';
 import { Chat } from './components/Chat';
 import { Login } from './components/Login';
 import { LiveThreats } from './components/LiveThreats';
+import { TeamSettings } from './components/TeamSettingsView';
 import type { AnalysisResponse, SavedAudit } from './types';
 import { Shield, Bell } from 'lucide-react';
 
@@ -14,6 +15,7 @@ function App() {
   const [audits, setAudits] = useState<SavedAudit[]>([]);
   const [activeData, setActiveData] = useState<SavedAudit | null>(null);
   const [isThreatFeedOpen, setIsThreatFeedOpen] = useState(false);
+  const [isTeamSettingsOpen, setIsTeamSettingsOpen] = useState(false);
 
   const [session, setSession] = useState<any>(null);
   
@@ -60,16 +62,40 @@ function App() {
   const handleNewAudit = () => {
     setActiveData(null);
     setIsThreatFeedOpen(false);
+    setIsTeamSettingsOpen(false);
   };
 
   const handleSelectAudit = (audit: SavedAudit) => {
     setActiveData(audit);
     setIsThreatFeedOpen(false);
+    setIsTeamSettingsOpen(false);
   };
 
   const handleOpenThreatFeed = () => {
     setActiveData(null);
     setIsThreatFeedOpen(true);
+    setIsTeamSettingsOpen(false);
+  };
+
+  const handleOpenTeamSettings = () => {
+    setActiveData(null);
+    setIsThreatFeedOpen(false);
+    setIsTeamSettingsOpen(true);
+  };
+
+  const handleDeleteAudit = async (sessionId: string) => {
+    if (!confirm('Are you sure you want to delete this audit?')) return;
+    try {
+      const { deleteAudit } = await import('./api');
+      await deleteAudit(sessionId);
+      setAudits(prev => prev.filter(a => a.session_id !== sessionId));
+      if (activeData?.session_id === sessionId) {
+        handleNewAudit();
+      }
+    } catch (err) {
+      console.error('Failed to delete audit:', err);
+      alert('Failed to delete audit.');
+    }
   };
 
   if (!session) {
@@ -77,59 +103,64 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-cyan-500/30">
+    <div className="flex h-screen w-full bg-stone-50 overflow-hidden selection:bg-accent-200">
       <Sidebar 
         audits={audits} 
         onSelectAudit={handleSelectAudit} 
         onOpenThreatFeed={handleOpenThreatFeed}
+        onOpenTeamSettings={handleOpenTeamSettings}
+        onDeleteAudit={handleDeleteAudit}
         activeSessionId={activeData?.session_id || null} 
         isThreatFeedOpen={isThreatFeedOpen}
+        isTeamSettingsOpen={isTeamSettingsOpen}
       />
       
       <main className="flex-1 relative flex flex-col h-full overflow-hidden">
         
         {/* Top Navbar for Context */}
-        <div className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center shadow-md z-10">
+        <div className="bg-white border-b border-stone-200 p-5 flex justify-between items-center z-10 shadow-sm">
           {isThreatFeedOpen ? (
-            <h2 className="text-slate-300 font-mono tracking-widest text-sm flex items-center gap-2">
-              <Bell size={16} className="text-fuchsia-400" />
-              LIVE THREAT MONITOR
+            <h2 className="text-stone-800 font-heading font-semibold tracking-wide text-sm flex items-center gap-2 uppercase">
+              <Bell size={18} className="text-accent-600" />
+              Live Threat Monitor
             </h2>
           ) : activeData ? (
-            <h2 className="text-slate-300 font-mono tracking-widest text-sm flex items-center gap-2">
-              <Shield size={16} className="text-cyan-400" />
-              ANALYSIS MODE: {activeData.vendor_name.toUpperCase()}
+            <h2 className="text-stone-800 font-heading font-semibold tracking-wide text-sm flex items-center gap-2 uppercase">
+              <Shield size={18} className="text-accent-600" />
+              Analysis Mode: {activeData.vendor_name}
             </h2>
           ) : (
-            <h2 className="text-slate-300 font-mono tracking-widest text-sm">NEW DUE DILIGENCE AUDIT</h2>
+            <h2 className="text-stone-800 font-heading font-semibold tracking-wide text-sm uppercase">New Due Diligence Audit</h2>
           )}
           
           <div className="flex gap-4">
             {activeData && (
               <button 
                 onClick={handleNewAudit}
-                className="text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition-colors"
+                className="text-xs font-semibold bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2 rounded-xl transition-colors"
               >
-                + NEW AUDIT
+                + New Audit
               </button>
             )}
             <button 
               onClick={() => supabase.auth.signOut()}
-              className="text-xs font-mono bg-red-900/50 hover:bg-red-900/80 text-red-200 px-3 py-1.5 rounded transition-colors"
+              className="text-xs font-semibold bg-white border border-stone-200 hover:bg-red-50 text-red-600 px-4 py-2 rounded-xl transition-colors"
             >
-              LOGOUT
+              Logout
             </button>
           </div>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-background to-background">
+        <div className="flex-1 overflow-auto bg-stone-50">
           {isThreatFeedOpen ? (
             <LiveThreats />
+          ) : isTeamSettingsOpen ? (
+            <TeamSettings />
           ) : !activeData ? (
             <Wizard onAnalysisComplete={handleAnalysisComplete} />
           ) : (
-            <div className="h-full relative">
+            <div className="min-h-full relative">
               <Results data={activeData} />
               <Chat 
                 key={activeData.session_id} 
