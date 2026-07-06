@@ -28,4 +28,4 @@ jobs:
         # We use "git subtree split" to extract ONLY the /backend folder from your GitHub repo.
         # It pushes that specific folder to the root of your Hugging Face Space so HF can find the Dockerfile.
         run: |
-          git push https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME `git subtree split --prefix backend HEAD`:main --force
+          git push https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME `git subtree split -q --prefix backend HEAD`:main --force
