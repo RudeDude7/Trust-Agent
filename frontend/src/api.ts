@@ -1,6 +1,6 @@
-import type { AnalysisResponse, SavedAudit, ChatResponse, GapAction } from './types';
+import type { AnalysisResponse, SavedAudit, ChatResponse, GapAction, RiskAssessment } from './types';
 import { supabase } from './supabase';
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 async function getAuthHeaders() {
   const { data } = await supabase.auth.getSession();
   if (!data.session) throw new Error('Not authenticated');
