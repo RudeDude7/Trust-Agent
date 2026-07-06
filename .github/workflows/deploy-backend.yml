@@ -1,9 +1,11 @@
 name: Deploy Backend to Hugging Face Spaces
 
+# This tells GitHub to only run this script when code is pushed to the 'main' branch
 on:
   push:
     branches:
       - main
+  # This allows you to manually click a "Run" button in GitHub to trigger a deployment
   workflow_dispatch:
 
 jobs:
@@ -22,23 +24,8 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_USERNAME: RudeDude7
           SPACE_NAME: trust-agent
+        
+        # We use "git subtree split" to extract ONLY the /backend folder from your GitHub repo.
+        # It pushes that specific folder to the root of your Hugging Face Space so HF can find the Dockerfile.
         run: |
-          # 1. Verify the token is available
-          if [ -z "$HF_TOKEN" ]; then
-            echo "Error: HF_TOKEN secret is empty! Please check your GitHub repository secrets."
-            exit 1
-          fi
-
-          # 2. Extract the backend folder into a new commit hash
-          echo "Splitting the backend folder..."
-          COMMIT_HASH=$(git subtree split -q --prefix backend HEAD)
-          echo "Generated subtree hash: $COMMIT_HASH"
-          
-          if [ -z "$COMMIT_HASH" ]; then
-            echo "Error: git subtree split failed to generate a hash!"
-            exit 1
-          fi
-
-          # 3. Push the specific commit hash to the Hugging Face Space 'main' branch
-          echo "Pushing to Hugging Face..."
-          git push https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME $COMMIT_HASH:main --force
+          git push https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$SPACE_NAME `git subtree split -q --prefix backend HEAD`:main --force
