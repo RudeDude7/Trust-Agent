@@ -116,7 +116,8 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
 
     async def event_generator():
         try:
-            initial_state: VendorDueDiligenceState = {  # type: ignore[typeddict-item]
+            initial_state: VendorDueDiligenceState = {
+                "user_id": user_id,
                 "vendor_name": request.vendor_name,
                 "vendor_url": request.vendor_url or "",
             }
@@ -258,11 +259,13 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
 @app.post("/upload_policy")
 async def upload_policy(
     file: UploadFile = File(...),
-    role: str = Form(...)
+    role: str = Form(...),
+    user_id: str = Depends(get_current_user)
 ):
     """
     Accepts a PDF document and a role ('internal' or 'vendor'), processes it 
     through the ingestion pipeline (parse → chunk → embed → insert into Supabase).
+    Requires authentication to scope documents to the user.
     """
     if role not in ["internal", "vendor"]:
         raise HTTPException(
@@ -278,7 +281,7 @@ async def upload_policy(
         )
 
     log.info("=" * 50)
-    log.info("Upload received: %s (size: %s)", file.filename, file.size)
+    log.info("Upload received: %s (size: %s, user: %s)", file.filename, file.size, user_id)
     log.info("=" * 50)
 
     # Save the uploaded file to a secure temporary location.
@@ -311,9 +314,9 @@ async def upload_policy(
         # Stage 3: Generate embeddings for all child chunks
         generate_child_embeddings(hierarchy, embedding_model)
 
-        # Stage 4: Insert into Supabase
+        # Stage 4: Insert into Supabase (purging old documents for this user+role)
         db = get_supabase_client()
-        insert_into_supabase(hierarchy, db)
+        insert_into_supabase(hierarchy, db, user_id, role)
 
         # Calculate total chunks ingested
         total_parents = len(hierarchy)
@@ -635,6 +638,7 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
         from judge_agent import judge_agent_node
 
         mock_state: VendorDueDiligenceState = {
+            "user_id": user_id,
             "vendor_name": vendor_name,
             "vendor_url": "",
             "osint_findings": raw_osint,

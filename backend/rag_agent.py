@@ -94,7 +94,7 @@ def _get_embedding_model() -> HuggingFaceEmbeddings:
 # ---------------------------------------------------------------------------
 # Core retrieval logic
 # ---------------------------------------------------------------------------
-def _retrieve_chunks(query: str) -> list[tuple[Document, float]]:
+def _retrieve_chunks(query: str, user_id: str) -> list[tuple[Document, float]]:
     """
     Embeds the query locally, then performs a cosine similarity search
     against the document_chunks table via a Supabase RPC call.
@@ -117,6 +117,7 @@ def _retrieve_chunks(query: str) -> list[tuple[Document, float]]:
                 "match_document_chunks",
                 {
                     "query_embedding": query_vector,
+                    "p_user_id": user_id,
                     "match_count": TOP_K_FETCH,
                     "match_threshold": SIMILARITY_THRESHOLD,
                 },
@@ -208,14 +209,15 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
     # Determine query — use state's rag_query if set, otherwise default.
     query: str = state.get("rag_query", "") or DEFAULT_RAG_QUERY
     vendor: str = state.get("vendor_name", "unknown vendor")
+    user_id: str = state.get("user_id", "")
 
     log.info("=" * 50)
-    log.info("RAG Agent activated for vendor: %s", vendor)
+    log.info("RAG Agent activated for vendor: %s (user: %s)", vendor, user_id)
     log.info("Search query: \"%s\"", query)
     log.info("=" * 50)
 
     # Retrieve matching child chunks with similarity scores.
-    results: list[tuple[Document, float]] = _retrieve_chunks(query)
+    results: list[tuple[Document, float]] = _retrieve_chunks(query, user_id)
 
     if not results:
         log.warning("No matching chunks found. Returning empty clause list.")
@@ -311,6 +313,7 @@ def rag_agent_node(state: VendorDueDiligenceState) -> dict:
 if __name__ == "__main__":
     # Quick smoke test — run the agent node with a minimal state.
     test_state: VendorDueDiligenceState = {  # type: ignore[typeddict-item]
+        "user_id": "00000000-0000-0000-0000-000000000000",
         "vendor_name": "TikTok",
         "vendor_url":  "https://tiktok.com",
     }

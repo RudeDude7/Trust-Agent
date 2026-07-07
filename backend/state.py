@@ -71,6 +71,7 @@ class VendorDueDiligenceState(TypedDict):
     """
 
     # ── 1. Inputs ──────────────────────────────────────────────
+    user_id: str                                                # authenticated user id
     vendor_name: str                                            # e.g. "TikTok"
     vendor_url: str                                             # e.g. "https://tiktok.com"
 

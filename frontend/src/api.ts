@@ -11,12 +11,17 @@ async function getAuthHeaders() {
 }
 
 export const uploadPolicy = async (file: File, role: 'internal' | 'vendor'): Promise<void> => {
+  const headers = await getAuthHeaders();
+  // Remove Content-Type so the browser can automatically set it with the boundary for FormData
+  const { 'Content-Type': _, ...headersWithoutContentType } = headers;
+  
   const formData = new FormData();
   formData.append('file', file);
   formData.append('role', role);
 
   const res = await fetch(`${API_BASE}/upload_policy`, {
     method: 'POST',
+    headers: headersWithoutContentType,
     body: formData,
   });
 

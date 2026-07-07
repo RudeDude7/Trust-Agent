@@ -212,17 +212,35 @@ def generate_child_embeddings(
 def insert_into_supabase(
     hierarchy: list[dict],
     db: Client,
+    user_id: str,
+    role: str
 ) -> None:
     """
     Stage 4: Insert parents and children into Supabase.
 
-    Insertion order matters — parents first (FK target), then children.
-    Uses batched upserts to stay within Supabase's request-size limits.
+    First, purge any existing documents for this user and role to prevent
+    cross-audit contamination. Then insert parents (FK target), then children.
     """
+    # --- Purge old documents for this user and role ---
+    log.info("Purging old '%s' documents for user %s ...", role, user_id)
+    # Supabase Python client doesn't support complex JSONB filtering easily, 
+    # but we can filter by user_id and then use metadata->>'role' = role via PostgREST textSearch or similar.
+    # Actually, the simplest way is to fetch the IDs and delete them.
+    res = db.table("documents").select("id, metadata").eq("user_id", user_id).execute()
+    old_docs = [d["id"] for d in (res.data or []) if d.get("metadata", {}).get("role") == role]
+    if old_docs:
+        log.info("Found %d old '%s' documents. Deleting...", len(old_docs), role)
+        # Delete in batches of 100 to be safe
+        for i in range(0, len(old_docs), 100):
+            batch_ids = old_docs[i:i+100]
+            db.table("documents").delete().in_("id", batch_ids).execute()
+        log.info("Purge complete. (Cascaded to document_chunks).")
+
     # --- Insert parent documents ---
     parent_rows: list[dict] = [
         {
             "id":       p["parent_id"],
+            "user_id":  user_id,
             "content":  p["content"],
             "metadata": json.loads(json.dumps(p["metadata"], default=str)),
         }
@@ -289,7 +307,7 @@ def main() -> None:
     pages: list[Document] = load_pdf(args.pdf, args.role)
     hierarchy: list[dict] = build_chunk_hierarchy(pages)
     generate_child_embeddings(hierarchy, embedding_model)
-    insert_into_supabase(hierarchy, db)
+    insert_into_supabase(hierarchy, db, "00000000-0000-0000-0000-000000000000", args.role)
 
 
 if __name__ == "__main__":
