@@ -73,8 +73,14 @@ CHILD_SPLITTER: RecursiveCharacterTextSplitter = (
 # ---------------------------------------------------------------------------
 # Initialization helpers
 # ---------------------------------------------------------------------------
+_supabase_client: Client | None = None
+
 def get_supabase_client() -> Client:
-    """Creates an authenticated Supabase client from env vars."""
+    """Creates (or reuses) an authenticated Supabase client from env vars."""
+    global _supabase_client
+    if _supabase_client is not None:
+        return _supabase_client
+
     url: str | None = os.environ.get("SUPABASE_URL")
     key: str | None = os.environ.get("SUPABASE_KEY")
 
@@ -82,9 +88,9 @@ def get_supabase_client() -> Client:
         log.error("SUPABASE_URL and SUPABASE_KEY must be set in .env")
         sys.exit(1)
 
-    client: Client = create_client(url, key)
+    _supabase_client = create_client(url, key)
     log.info("Supabase client connected → %s", url.split("//")[1][:25] + "…")
-    return client
+    return _supabase_client
 
 
 def get_embedding_model() -> HuggingFaceEmbeddings:
