@@ -73,6 +73,9 @@ CHILD_SPLITTER: RecursiveCharacterTextSplitter = (
 # ---------------------------------------------------------------------------
 # Initialization helpers
 # ---------------------------------------------------------------------------
+from supabase import Client, create_client, ClientOptions
+import httpx
+
 _supabase_client: Client | None = None
 
 def get_supabase_client() -> Client:
@@ -88,7 +91,11 @@ def get_supabase_client() -> Client:
         log.error("SUPABASE_URL and SUPABASE_KEY must be set in .env")
         sys.exit(1)
 
-    _supabase_client = create_client(url, key)
+    # Disable HTTP/2 to prevent GOAWAY/ConnectionTerminated errors on idle connections
+    custom_httpx = httpx.Client(http2=False)
+    options = ClientOptions(httpx_client=custom_httpx)
+
+    _supabase_client = create_client(url, key, options=options)
     log.info("Supabase client connected → %s", url.split("//")[1][:25] + "…")
     return _supabase_client
 
