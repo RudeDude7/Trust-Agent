@@ -1,5 +1,7 @@
 # 🛡️ Trust Agent: Autonomous Vendor Due Diligence Platform
 
+**🌐 Live Demo:** [https://trust-agent-five.vercel.app/](https://trust-agent-five.vercel.app/)
+
 ![Architecture: Multi-Agent](https://img.shields.io/badge/Architecture-LangGraph_Multi--Agent-purple?style=for-the-badge)
 ![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Frontend: React](https://img.shields.io/badge/Frontend-React_Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black)
