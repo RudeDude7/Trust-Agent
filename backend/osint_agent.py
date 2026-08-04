@@ -15,6 +15,8 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
+import math
+from datetime import datetime, timezone
 
 from duckduckgo_search import DDGS
 from duckduckgo_search.exceptions import DuckDuckGoSearchException as DDGSException, RatelimitException
@@ -95,10 +97,10 @@ def _classify_finding(title: str, snippet: str) -> str:
 # ---------------------------------------------------------------------------
 # Relevance scorer (simple keyword overlap)
 # ---------------------------------------------------------------------------
-def _score_relevance(title: str, snippet: str, vendor: str) -> float:
+def _score_relevance(title: str, snippet: str, vendor: str, date_str: str = "") -> float:
     """
-    Scores 0.0 – 1.0 based on weighted risk keywords, negators, and proximity to the vendor name.
-    Higher scores mean the finding is more directly relevant to security/compliance risk.
+    Scores 0.0 – 1.0 based on weighted risk keywords, negators, proximity to the vendor name,
+    and a recency decay multiplier so newer news is prioritized.
     """
     text: str = (title + " " + snippet).lower()
     vendor_lower: str = vendor.lower()
@@ -152,6 +154,23 @@ def _score_relevance(title: str, snippet: str, vendor: str) -> float:
                         
                     score += actual_weight
                     
+    # 4. Recency Decay (Phase 2)
+    decay_multiplier = 1.0
+    if date_str:
+        try:
+            # Parse ISO date (e.g. "2026-07-16T17:35:00+00:00")
+            pub_date = datetime.fromisoformat(date_str)
+            now = datetime.now(timezone.utc)
+            days_old = max(0, (now - pub_date).days)
+            
+            # Exponential decay: e^(-lambda * days)
+            # If a post is 365 days old, multiplier drops to ~0.5
+            decay_multiplier = math.exp(-0.0019 * days_old)
+        except Exception:
+            pass
+            
+    score = score * decay_multiplier
+                    
     # Cap the final score strictly between 0.0 and 1.0
     return round(max(0.0, min(score, 1.0)), 2)
 
@@ -161,14 +180,14 @@ def _score_relevance(title: str, snippet: str, vendor: str) -> float:
 # ---------------------------------------------------------------------------
 def _search_duckduckgo(query: str) -> list[dict[str, Any]]:
     """
-    Executes a DuckDuckGo text search and returns raw result dicts.
+    Executes a DuckDuckGo news search and returns raw result dicts.
 
-    Each result has keys: 'title', 'href', 'body'.
+    Each result has keys: 'title', 'url', 'body', 'date'.
     Returns an empty list on failure (network errors, rate limits, etc.).
     """
     try:
         ddgs = DDGS()
-        results: list[dict[str, Any]] = ddgs.text(
+        results: list[dict[str, Any]] = ddgs.news(
             query,
             region=SEARCH_REGION,
             max_results=MAX_RESULTS,
@@ -236,7 +255,8 @@ def osint_agent_node(state: VendorDueDiligenceState) -> dict:
         for result in raw_results:
             title: str = str(result.get("title", ""))
             snippet: str = str(result.get("body", ""))
-            url: str = str(result.get("href", ""))
+            url: str = str(result.get("url", result.get("href", "")))
+            date_str: str = str(result.get("date", ""))
 
             if not url:
                 continue
@@ -245,7 +265,7 @@ def osint_agent_node(state: VendorDueDiligenceState) -> dict:
                 "source_url":      url,
                 "title":           title,
                 "snippet":         snippet[:500],  # cap length for the LLM context window
-                "relevance_score": _score_relevance(title, snippet, vendor),
+                "relevance_score": _score_relevance(title, snippet, vendor, date_str),
                 "finding_type":    _classify_finding(title, snippet),
             }
             all_findings.append(finding)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import cast
 
 from dotenv import load_dotenv
@@ -67,7 +68,7 @@ class RiskAssessmentModel(BaseModel):
 # ---------------------------------------------------------------------------
 JUDGE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are a Senior Risk and Compliance Officer performing vendor due diligence.
-Your job is to evaluate a vendor's risk profile by performing a Comparative Analysis. You must cross-reference their internal stated policies against our company's internal policies (provided in the RAG Clauses, labeled with their respective roles), and against external reality (OSINT Findings).
+Your job is to evaluate a vendor's risk profile by performing a Comparative Analysis. You must cross-reference their internal stated policies against our company's internal policies (provided in the Compliance Matrix and RAG Findings), and against external reality (OSINT Findings).
 
 Analyze the provided inputs and determine the risk level:
 - LOW: No major breaches or regulatory actions, strong policies aligned with ours.
@@ -78,14 +79,70 @@ Analyze the provided inputs and determine the risk level:
 You must explicitly separate your findings into `osint_inferences` (from news/web) and `rag_inferences` (from policy text). In your `comparative_analysis`, explicitly state how the vendor's policy compares to the internal policy. Rely ONLY on the provided RAG and OSINT data."""),
     ("user", """Vendor Name: {vendor_name}
 
-=== INTERNAL POLICIES (RAG CLAUSES) ===
-{rag_clauses}
+=== INTERNAL POLICIES (COMPLIANCE MATRIX & FINDINGS) ===
+{rag_text}
 
 === EXTERNAL NEWS (OSINT FINDINGS) ===
 {osint_findings}
 
 Evaluate the vendor and provide the final structured risk assessment.""")
 ])
+
+VERIFIER_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are a strict QA Auditor for a Risk Assessment pipeline.
+Your job is to review a proposed Risk Assessment against the provided source texts.
+Ensure that every point in `osint_inferences` and `rag_inferences` is explicitly supported by the source texts.
+If you find any hallucinations (claims not in the text), you MUST strip them out.
+Adjust the `overall_risk_level`, `confidence_score`, `summary`, `comparative_analysis`, and `data_gaps` appropriately based ONLY on the remaining valid inferences.
+If the original assessment is completely faithful, return it exactly as is, ensuring all fields of the structured output are provided."""),
+    ("user", """=== SOURCE TEXTS ===
+OSINT: {osint_findings}
+
+RAG (Internal Policies): {rag_text}
+
+=== PROPOSED ASSESSMENT ===
+Risk Level: {risk_level}
+Confidence: {confidence}
+Summary: {summary}
+OSINT Inferences: {osint_inferences}
+RAG Inferences: {rag_inferences}
+Comparative Analysis: {comparative_analysis}
+Data Gaps: {data_gaps}
+
+Return the corrected and verified Risk Assessment.""")
+])
+
+
+# ---------------------------------------------------------------------------
+# Input Guardrails
+# ---------------------------------------------------------------------------
+def _sanitize_prompt_injection(findings: list[dict]) -> list[dict]:
+    """
+    Heuristic regex scanner to detect and strip potential indirect prompt injections
+    from web-scraped content before they reach the LLM.
+    """
+    safe_findings = []
+    
+    # Common jailbreak and prompt injection attack vectors
+    injection_patterns = [
+        r"ignore (all )?previous instructions",
+        r"system prompt",
+        r"you are now",
+        r"forget all",
+        r"bypass (the|all)? rules",
+        r"print out your",
+        r"disregard"
+    ]
+    pattern = re.compile("|".join(injection_patterns), re.IGNORECASE)
+    
+    for finding in findings:
+        text = str(finding.get("title", "")) + " " + str(finding.get("snippet", ""))
+        if pattern.search(text):
+            log.warning("🚨 PROMPT INJECTION DETECTED & BLOCKED in OSINT finding from %s", finding.get("source_url"))
+            continue
+        safe_findings.append(finding)
+        
+    return safe_findings
 
 
 # ---------------------------------------------------------------------------
@@ -101,18 +158,22 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
     4. Returns the validated JSON payload to the state.
     """
     vendor: str = state.get("vendor_name", "unknown vendor")
-    rag_clauses = state.get("rag_clauses", [])
-    osint_findings = state.get("osint_findings", [])
+    rag_findings = state.get("rag_findings", [])
+    compliance_matrix = state.get("compliance_matrix", {})
+    
+    raw_osint = state.get("osint_findings", [])
+    osint_findings = _sanitize_prompt_injection(raw_osint) if raw_osint else []
 
     log.info("=" * 50)
     log.info("Judge Agent activated for vendor: %s", vendor)
     log.info("=" * 50)
 
     # Format inputs for the prompt
-    rag_text = json.dumps(rag_clauses, indent=2) if rag_clauses else "No internal policies found."
+    rag_data = {"findings": rag_findings, "matrix": compliance_matrix}
+    rag_text = json.dumps(rag_data, indent=2) if rag_findings or compliance_matrix else "No internal policies found."
     osint_text = json.dumps(osint_findings, indent=2) if osint_findings else "No external news found."
 
-    log.info("Analyzing %d RAG clauses and %d OSINT findings...", len(rag_clauses), len(osint_findings))
+    log.info("Analyzing %d RAG findings and %d OSINT findings...", len(rag_findings), len(osint_findings))
 
     # Initialize the LLM
     llm = ChatGoogleGenerativeAI(
@@ -130,16 +191,38 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
         # Execute the chain
         result: RiskAssessmentModel = cast(RiskAssessmentModel, chain.invoke({
             "vendor_name": vendor,
-            "rag_clauses": rag_text,
+            "rag_text": rag_text,
             "osint_findings": osint_text
         }))
         
-        log.info("Judge Agent completed evaluation. Risk Level: %s (Confidence: %.2f)", 
+        log.info("Judge Agent initial evaluation. Risk Level: %s (Confidence: %.2f)", 
                  result.overall_risk_level, result.confidence_score)
                  
+        # --- PHASE 3 GUARDRAIL: SELF-CORRECTION / HALLUCINATION CHECK ---
+        log.info("Running Verifier Guardrail to check for hallucinations...")
+        verifier_chain = VERIFIER_PROMPT | structured_llm
+        
+        verified_result: RiskAssessmentModel = cast(RiskAssessmentModel, verifier_chain.invoke({
+            "osint_findings": osint_text,
+            "rag_text": rag_text,
+            "risk_level": result.overall_risk_level,
+            "confidence": result.confidence_score,
+            "summary": result.summary,
+            "osint_inferences": json.dumps(result.osint_inferences),
+            "rag_inferences": json.dumps(result.rag_inferences),
+            "comparative_analysis": result.comparative_analysis,
+            "data_gaps": json.dumps(result.data_gaps)
+        }))
+        
+        if (verified_result.osint_inferences != result.osint_inferences or 
+            verified_result.rag_inferences != result.rag_inferences):
+            log.warning("Hallucinations detected and stripped! Corrected Risk Level: %s", verified_result.overall_risk_level)
+        else:
+            log.info("Guardrail passed: No hallucinations detected.")
+            
         return {
-            "risk_assessment": result.model_dump(),
-            "judge_reasoning": "Assessment generated successfully."
+            "risk_assessment": verified_result.model_dump(),
+            "judge_reasoning": "Assessment generated and verified successfully."
         }
         
     except Exception as exc:
@@ -176,22 +259,15 @@ if __name__ == "__main__":
                 "finding_type": "regulatory_filing"
             }
         ],
-        "rag_clauses": [
-            {
-                "clause_text": "We protect user data using industry standard encryption.",
-                "source_document": "privacy_policy.pdf",
-                "similarity_score": 0.85,
-                "parent_context": "We take privacy seriously. We protect user data using industry standard encryption.",
-                "role": "vendor"
-            },
-            {
-                "clause_text": "All vendors must use AES-256 encryption at rest.",
-                "source_document": "internal_policy.pdf",
-                "similarity_score": 0.90,
-                "parent_context": "All vendors must use AES-256 encryption at rest.",
-                "role": "internal"
+        "rag_findings": [
+            "Vendor encryption policy does not meet the AES-256 requirement."
+        ],
+        "compliance_matrix": {
+            "Encryption": {
+                "status": "Non-compliant",
+                "details": "Vendor uses industry standard, but does not specify AES-256."
             }
-        ]
+        }
     }
 
     print("Running Judge Agent Standalone Test...\n")
