@@ -17,11 +17,23 @@ from pathlib import Path
 from typing import Optional
 
 import json
+import asyncio
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# Initialize OpenTelemetry
+provider = TracerProvider()
+processor = BatchSpanProcessor(ConsoleSpanExporter())
+provider.add_span_processor(processor)
+trace.set_tracer_provider(provider)
 
 import uuid
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -31,15 +43,13 @@ from state import VendorDueDiligenceState
 
 # Global session cache removed for stateless API chat follow-ups
 
-# Reuse the battle-tested ingestion functions from ingest.py
-from ingest import (
-    build_chunk_hierarchy,
-    generate_child_embeddings,
-    get_embedding_model,
-    get_supabase_client,
-    load_pdf,
-    insert_into_supabase,
-)
+from redis import Redis
+from rq import Queue
+from ingest import process_ingestion_job
+
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis_conn = Redis.from_url(redis_url)
+ingest_queue = Queue('ingestion_queue', connection=redis_conn)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -64,6 +74,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Instrument the FastAPI app with OpenTelemetry
+FastAPIInstrumentor.instrument_app(app)
 
 security = HTTPBearer()
 
@@ -135,9 +148,9 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
                     if node_name == "osint_agent":
                         msg = "[OSINT Agent] Completed web reconnaissance..."
                         raw_osint = state_update.get("osint_findings", [])
-                    elif node_name == "rag_agent":
-                        msg = "[RAG Agent] Extracted policy discrepancies..."
-                        raw_rag = state_update.get("rag_clauses", [])
+                    elif node_name == "comparator_agent":
+                        msg = "[Comparator Agent] Extracted policy discrepancies..."
+                        raw_rag = state_update.get("rag_findings", [])
                     elif node_name == "judge_agent":
                         msg = "[Judge Agent] Finalizing risk assessment..."
                         final_assessment = state_update.get("risk_assessment")
@@ -150,7 +163,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
 
             # Attach raw data for sandbox what-if analysis
             final_assessment["raw_osint_findings"] = raw_osint
-            final_assessment["raw_rag_clauses"] = raw_rag
+            final_assessment["rag_findings"] = raw_rag
 
             # Deduplication and Versioning Logic
             db = get_supabase_client()
@@ -171,7 +184,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
             def get_raw_fingerprint(assessment):
                 return json_lib.dumps({
                     "osint": assessment.get("raw_osint_findings", []),
-                    "rag": assessment.get("raw_rag_clauses", [])
+                    "rag": assessment.get("rag_findings", [])
                 }, sort_keys=True)
 
             new_raw_fingerprint = get_raw_fingerprint(final_assessment)
@@ -302,55 +315,76 @@ async def upload_policy(
 
         log.info("Saved to temp file: %s", tmp_path)
 
-        # Stage 1: Load the PDF pages with the role metadata
-        pages = load_pdf(Path(tmp_path), role)
-
-        if not pages:
-            raise HTTPException(status_code=400, detail="PDF appears to be empty or unreadable.")
-
-        # Stage 2: Build parent/child chunk hierarchy
-        hierarchy = build_chunk_hierarchy(pages)
-
-        # Stage 3: Generate embeddings for all child chunks
-        generate_child_embeddings(hierarchy, embedding_model)
-
-        # Stage 4: Insert into Supabase (purging old documents for this user+role)
-        db = get_supabase_client()
-        insert_into_supabase(hierarchy, db, user_id, role)
-
-        # Calculate total chunks ingested
-        total_parents = len(hierarchy)
-        total_children = sum(len(p["children"]) for p in hierarchy)
-
-        log.info(
-            "✅ Ingestion complete for '%s': %d parents, %d children.",
-            file.filename, total_parents, total_children,
+        # Enqueue the background ingestion task
+        job = ingest_queue.enqueue(
+            process_ingestion_job, 
+            tmp_path, 
+            role, 
+            user_id, 
+            job_timeout=3600
         )
 
+        log.info("✅ Ingestion job queued for '%s': %s", file.filename, job.id)
+
         return {
-            "status": "success",
+            "status": "processing",
             "filename": file.filename,
-            "pages_parsed": len(pages),
-            "parent_chunks": total_parents,
-            "child_chunks": total_children,
-            "total_chunks_ingested": total_parents + total_children,
+            "job_id": job.id,
+            "message": "Document queued for asynchronous ingestion."
         }
 
     except HTTPException:
         raise  # Re-raise our own validation errors cleanly
     except Exception as e:
-        log.error("Ingestion failed for '%s': %s", file.filename, e)
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
-
-    finally:
-        # CRITICAL: Always delete the temp file, even if the pipeline explodes.
-        # In ephemeral containers (HF Spaces, Cloud Run), disk is finite and
-        # not cleaned between requests. Leaked files accumulate and eventually
-        # crash the container with "No space left on device."
+        log.error("Ingestion failed to queue for '%s': %s", file.filename, e)
+        # Note: We manually delete tmp_path here because the job wasn't queued.
+        # If it WAS queued, the worker deletes it in process_ingestion_job.
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
-            log.info("Cleaned up temp file: %s", tmp_path)
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 2.5: SSE Progress Tracking for Uploads
+# ═══════════════════════════════════════════════════════════════════════════
+@app.get("/upload_progress/{job_id}")
+async def upload_progress(job_id: str):
+    """
+    Server-Sent Events (SSE) endpoint to stream real-time progress
+    of a background ingestion job.
+    """
+    async def event_generator():
+        pubsub = redis_conn.pubsub()
+        channel = f"ingest_progress:{job_id}"
+        pubsub.subscribe(channel)
+        
+        try:
+            while True:
+                message = pubsub.get_message(ignore_subscribe_messages=True)
+                if message:
+                    data = message["data"].decode("utf-8")
+                    yield f"data: {data}\n\n"
+                    
+                    # If progress reaches 100 or -1, close the stream
+                    try:
+                        parsed = json.loads(data)
+                        if parsed.get("progress") in (100, -1):
+                            break
+                    except Exception:
+                        pass
+                        
+                await asyncio.sleep(0.1)
+        finally:
+            pubsub.unsubscribe(channel)
+            
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ENDPOINT 3: Health check
@@ -409,7 +443,9 @@ async def chat_endpoint(request: ChatRequest, user_id: str = Depends(get_current
             vendor_name=vendor_name,
             context=context_str,
             history=history,
-            user_msg=request.message
+            user_msg=request.message,
+            session_id=request.session_id,
+            user_id=user_id
         )
         
         # Update database with new history
@@ -622,15 +658,15 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
         risk = audit["risk_assessment"]
 
         raw_osint = risk.get("raw_osint_findings", [])
-        raw_rag = risk.get("raw_rag_clauses", [])
+        raw_rag = risk.get("rag_findings", [])
 
         if not raw_rag and not raw_osint:
             raise HTTPException(status_code=400, detail="This audit is too old and lacks raw data for sandbox simulation. Please re-run the analysis first.")
 
-        # Filter out the disabled clauses
+        # Filter out the disabled clauses (which are strings now)
         filtered_rag = []
         for clause in raw_rag:
-            if clause.get("clause_text") not in request.disabled_clauses:
+            if clause not in request.disabled_clauses:
                 filtered_rag.append(clause)
 
         # Re-run the judge agent
@@ -643,9 +679,8 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
             "vendor_url": "",
             "osint_findings": raw_osint,
             "osint_summary": "",
-            "rag_clauses": filtered_rag,
-            "rag_query": "",
-            "rag_summary": "",
+            "rag_findings": filtered_rag,
+            "compliance_matrix": {},
             "risk_assessment": None,
             "judge_reasoning": ""
         }
