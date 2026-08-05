@@ -132,3 +132,5 @@ pandas==2.2.3
 opentelemetry-api==1.25.0
 opentelemetry-sdk==1.25.0
 opentelemetry-instrumentation-fastapi==0.46b0
+redis==5.0.3
+rq==1.16.1
