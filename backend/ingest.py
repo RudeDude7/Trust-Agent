@@ -22,14 +22,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-from langchain_community.document_loaders import PyMuPDFLoader
+from supabase import Client, create_client, ClientOptions
+import httpx
+
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_experimental.text_splitter import SemanticChunker
-from supabase import Client, create_client
-import io
 import fitz
-from PIL import Image
 import base64
 from langchain_core.messages import HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -73,11 +72,8 @@ def publish_progress(job_id: str, progress: int, status: str):
 # ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
 # Initialization helpers
 # ---------------------------------------------------------------------------
-from supabase import Client, create_client, ClientOptions
-import httpx
 
 _supabase_client: Client | None = None
 
@@ -207,7 +203,7 @@ def build_chunk_hierarchy(pages: list[Document], embedding_model: HuggingFaceEmb
     for parent_doc in parents:
         parent_id: str = str(uuid.uuid4())
 
-        children: list[Document] = CHILD_SPLITTER.split_documents([parent_doc])
+        children: list[Document] = child_splitter.split_documents([parent_doc])
 
         hierarchy.append({
             "parent_id": parent_id,

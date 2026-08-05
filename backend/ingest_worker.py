@@ -1,7 +1,7 @@
 import os
 import logging
 from redis import Redis
-from rq import Worker, Queue
+from rq import Worker
 
 logging.basicConfig(
     level=logging.INFO,

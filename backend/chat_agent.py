@@ -8,7 +8,7 @@ has access to a similarity search tool to query Supabase for fresh policy chunks
 
 from typing import Annotated, List, Dict
 import logging
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.checkpoint.memory import MemorySaver

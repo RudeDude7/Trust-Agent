@@ -13,8 +13,8 @@ Endpoints:
 import logging
 import os
 import tempfile
-from pathlib import Path
 from typing import Optional
+import uuid
 
 import json
 import asyncio
@@ -24,10 +24,19 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+from redis import Redis
+from rq import Queue
+
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+from main import build_graph
+from state import VendorDueDiligenceState
+from ingest import process_ingestion_job, get_embedding_model, get_supabase_client
+from chat_agent import ChatAgent
 
 # Initialize OpenTelemetry
 provider = TracerProvider()
@@ -35,17 +44,7 @@ processor = BatchSpanProcessor(ConsoleSpanExporter())
 provider.add_span_processor(processor)
 trace.set_tracer_provider(provider)
 
-import uuid
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-from main import build_graph
-from state import VendorDueDiligenceState
-
 # Global session cache removed for stateless API chat follow-ups
-
-from redis import Redis
-from rq import Queue
-from ingest import process_ingestion_job, get_embedding_model, get_supabase_client
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_conn = Redis.from_url(redis_url)
@@ -380,7 +379,6 @@ async def health_check():
 
 
 # Global Chat Agent
-from chat_agent import ChatAgent
 chat_agent_instance = ChatAgent()
 
 @app.get("/audits")
