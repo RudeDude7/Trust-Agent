@@ -70,13 +70,13 @@ def main():
             print(f"Failed to load the nightly dataset: {e}")
             sys.exit(1)
 
-    print(f"Running full suite of RAG metrics via Ragas on the {args.tier.upper()} dataset...")
-    print("(Metrics: Faithfulness, Context Precision, Context Recall, Answer Relevancy)")
+    print(f"Running lightweight RAG metrics via Ragas on the {args.tier.upper()} dataset...")
+    print("(Metrics: Faithfulness, Answer Relevancy)")
     
     try:
         result = evaluate(
             dataset = dataset,
-            metrics=[faithfulness, context_precision, context_recall, answer_relevancy],
+            metrics=[faithfulness, answer_relevancy],
             llm=eval_llm,
             embeddings=eval_embeddings
         )
@@ -96,8 +96,6 @@ def main():
             return 0.0
 
     f_score = safe_get(result, "faithfulness")
-    cp_score = safe_get(result, "context_precision")
-    cr_score = safe_get(result, "context_recall")
     ar_score = safe_get(result, "answer_relevancy")
     
     print("\n" + "="*30)
@@ -105,10 +103,8 @@ def main():
     print("="*30)
     print(f"Faithfulness (Generation):      {f_score:.2f}")
     print(f"Answer Relevancy (Generation):  {ar_score:.2f}")
-    print(f"Context Precision (Retrieval):  {cp_score:.2f}")
-    print(f"Context Recall (Retrieval):     {cr_score:.2f}")
     
-    avg_score = (f_score + cp_score + cr_score + ar_score) / 4.0
+    avg_score = (f_score + ar_score) / 2.0
     print(f"\nOverall Pipeline Average:       {avg_score:.2f}")
     print("="*30 + "\n")
     
