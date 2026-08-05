@@ -2,6 +2,17 @@ import sys
 import argparse
 import pandas as pd
 
+# Create a dummy module to satisfy the import for ragas 0.1.7 compatibility with langchain_community 0.4.x
+import types
+_vx = types.ModuleType("langchain_community.chat_models.vertexai")
+class ChatVertexAI:
+    pass
+_vx.ChatVertexAI = ChatVertexAI
+sys.modules["langchain_community.chat_models.vertexai"] = _vx
+_cm = types.ModuleType("langchain_community.chat_models")
+_cm.ChatVertexAI = ChatVertexAI
+sys.modules["langchain_community.chat_models"] = _cm
+
 # We need to import evaluating elements from Ragas
 from datasets import Dataset
 from ragas import evaluate
