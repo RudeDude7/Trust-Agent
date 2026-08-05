@@ -28,12 +28,22 @@ def main():
     print(f"Initializing LLM and Embedding models for {args.tier.upper()} Evaluation...")
     # Initialize the LLM evaluator (Gemini) and the Embedding model
     try:
-        eval_llm = ChatGoogleGenerativeAI(
+        from ragas.llms.base import LangchainLLMWrapper
+        
+        _base_llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash", 
             temperature=0.0, 
             max_output_tokens=8192, 
             max_retries=5
         )
+        
+        # Ragas 0.2.x strictly checks for finish_reason == 'stop', but Gemini returns 'STOP'.
+        # We supply a custom is_finished_parser that defaults to True for Gemini.
+        eval_llm = LangchainLLMWrapper(
+            langchain_llm=_base_llm,
+            is_finished_parser=lambda _: True
+        )
+        
         eval_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     except Exception as e:
         print(f"Failed to initialize models. Check your API keys. Error: {e}")
