@@ -28,7 +28,12 @@ def main():
     print(f"Initializing LLM and Embedding models for {args.tier.upper()} Evaluation...")
     # Initialize the LLM evaluator (Gemini) and the Embedding model
     try:
-        eval_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0)
+        eval_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash", 
+            temperature=0.0, 
+            max_output_tokens=8192, 
+            max_retries=5
+        )
         eval_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     except Exception as e:
         print(f"Failed to initialize models. Check your API keys. Error: {e}")
@@ -72,10 +77,18 @@ def main():
     print(f"\nEvaluation Results (Raw):\n{result}")
     
     # Extract the scores safely
-    f_score = result.get("faithfulness", 0.0)
-    cp_score = result.get("context_precision", 0.0)
-    cr_score = result.get("context_recall", 0.0)
-    ar_score = result.get("answer_relevancy", 0.0)
+    def safe_get(res, key):
+        try:
+            val = res[key]
+            import math
+            return 0.0 if math.isnan(val) else val
+        except Exception:
+            return 0.0
+
+    f_score = safe_get(result, "faithfulness")
+    cp_score = safe_get(result, "context_precision")
+    cr_score = safe_get(result, "context_recall")
+    ar_score = safe_get(result, "answer_relevancy")
     
     print("\n" + "="*30)
     print("📊 FINAL BENCHMARK SCORES")
