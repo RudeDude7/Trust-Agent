@@ -16,7 +16,7 @@ sys.modules["langchain_community.chat_models"] = _cm
 # We need to import evaluating elements from Ragas
 from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import faithfulness, context_precision, context_recall, answer_relevancy
+from ragas.metrics.collections import faithfulness, context_precision, context_recall, answer_relevancy
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEmbeddings
 
