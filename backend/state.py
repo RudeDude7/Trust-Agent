@@ -30,15 +30,6 @@ class OSINTFinding(TypedDict):
     finding_type: str               # e.g. "news_article", "regulatory_filing", "breach_report"
 
 
-class RAGClause(TypedDict):
-    """A policy clause retrieved from Supabase by the RAG agent."""
-    clause_text: str                # the raw text of the matched chunk
-    source_document: str            # filename or document title it came from
-    similarity_score: float         # cosine similarity from the vector search
-    parent_context: str             # the larger parent chunk for grounding
-    role: str                       # 'internal' or 'vendor'
-
-
 class RiskAssessment(TypedDict):
     """The structured verdict produced by the Judge agent."""
     overall_risk_level: str         # "LOW", "MEDIUM", "HIGH", "CRITICAL"
@@ -79,10 +70,9 @@ class VendorDueDiligenceState(TypedDict):
     osint_findings: Annotated[list[OSINTFinding], operator.add]
     osint_summary: str                                          # plain-language digest
 
-    # ── 3. RAG Stage ───────────────────────────────────────────
-    rag_clauses: Annotated[list[RAGClause], operator.add]
-    rag_query: str                                              # the search query used
-    rag_summary: str                                            # plain-language digest
+    # ── 3. Comparator Stage (formerly RAG) ─────────────────────
+    rag_findings: Annotated[list[str], operator.add]            # Identified discrepancies and policy gaps
+    compliance_matrix: dict                                     # Structured mapping of internal vs vendor policies
 
     # ── 4. Judge Stage ─────────────────────────────────────────
     risk_assessment: RiskAssessment | None                      # final structured verdict

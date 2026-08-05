@@ -12,7 +12,7 @@ from langgraph.graph import StateGraph, START, END
 
 from state import VendorDueDiligenceState
 from osint_agent import osint_agent_node
-from rag_agent import rag_agent_node
+from comparator_agent import comparator_agent_node
 from judge_agent import judge_agent_node
 
 # ---------------------------------------------------------------------------
@@ -40,13 +40,13 @@ def build_graph():
 
     # 2. Add our agent nodes
     workflow.add_node("osint_agent", osint_agent_node)
-    workflow.add_node("rag_agent", rag_agent_node)
+    workflow.add_node("comparator_agent", comparator_agent_node)
     workflow.add_node("judge_agent", judge_agent_node)
 
     # 3. Define the sequential control flow
     workflow.add_edge(START, "osint_agent")
-    workflow.add_edge("osint_agent", "rag_agent")
-    workflow.add_edge("rag_agent", "judge_agent")
+    workflow.add_edge("osint_agent", "comparator_agent")
+    workflow.add_edge("comparator_agent", "judge_agent")
     workflow.add_edge("judge_agent", END)
 
     # 4. Compile into an executable application
@@ -63,6 +63,7 @@ if __name__ == "__main__":
     initial_state: VendorDueDiligenceState = { # type: ignore[typeddict-item]
         "vendor_name": "TikTok",
         "vendor_url":  "https://tiktok.com",
+        "user_id": "00000000-0000-0000-0000-000000000000",
     }
 
     log.info("Starting full due diligence pipeline for vendor: %s", initial_state["vendor_name"])
@@ -87,4 +88,4 @@ if __name__ == "__main__":
 
 
 # Compilation validates the graph, maps state reducers, and prepares the Runnable.
-# Note: For lower latency, OSINT and RAG could run in parallel since they don't depend on each other.
+# Note: For lower latency, OSINT and Comparator could run in parallel since they don't depend on each other.

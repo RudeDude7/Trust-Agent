@@ -7,6 +7,7 @@ ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    redis-server \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -25,4 +26,4 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["./start.sh"]

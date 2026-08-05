@@ -23,9 +23,7 @@ from duckduckgo_search.exceptions import DuckDuckGoSearchException as DDGSExcept
 
 from state import OSINTFinding, VendorDueDiligenceState
 
-# ---------------------------------------------------------------------------
 # Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
@@ -34,9 +32,7 @@ logging.basicConfig(
 log = logging.getLogger("osint_agent")
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 MAX_RESULTS: int = 5              # cap per search query (keep it fast)
 SEARCH_REGION: str = "wt-wt"     # worldwide, no region bias
 
@@ -48,9 +44,7 @@ QUERY_TEMPLATES: list[str] = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Finding-type classifier (simple keyword heuristic)
-# ---------------------------------------------------------------------------
 def _classify_finding(title: str, snippet: str) -> str:
     """
     Assigns a finding_type based on keyword presence in the title/snippet.
@@ -94,9 +88,7 @@ def _classify_finding(title: str, snippet: str) -> str:
     return "news_article"
 
 
-# ---------------------------------------------------------------------------
 # Relevance scorer (simple keyword overlap)
-# ---------------------------------------------------------------------------
 def _score_relevance(title: str, snippet: str, vendor: str, date_str: str = "") -> float:
     """
     Scores 0.0 – 1.0 based on weighted risk keywords, negators, proximity to the vendor name,
@@ -175,9 +167,7 @@ def _score_relevance(title: str, snippet: str, vendor: str, date_str: str = "") 
     return round(max(0.0, min(score, 1.0)), 2)
 
 
-# ---------------------------------------------------------------------------
 # Core search logic
-# ---------------------------------------------------------------------------
 def _search_duckduckgo(query: str) -> list[dict[str, Any]]:
     """
     Executes a DuckDuckGo news search and returns raw result dicts.
@@ -208,9 +198,7 @@ def _search_duckduckgo(query: str) -> list[dict[str, Any]]:
         return []
 
 
-# ---------------------------------------------------------------------------
 # Deduplication helper
-# ---------------------------------------------------------------------------
 def _deduplicate(findings: list[OSINTFinding]) -> list[OSINTFinding]:
     """Removes duplicate findings based on source_url."""
     seen: set[str] = set()
@@ -224,9 +212,7 @@ def _deduplicate(findings: list[OSINTFinding]) -> list[OSINTFinding]:
     return unique
 
 
-# ---------------------------------------------------------------------------
 # LangGraph node function
-# ---------------------------------------------------------------------------
 def osint_agent_node(state: VendorDueDiligenceState) -> dict:
     """
     OSINT agent node for the LangGraph vendor due diligence pipeline.
@@ -304,9 +290,7 @@ def osint_agent_node(state: VendorDueDiligenceState) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
 # Standalone test
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     test_state: VendorDueDiligenceState = {  # type: ignore[typeddict-item]
         "vendor_name": "TikTok",
@@ -333,71 +317,4 @@ if __name__ == "__main__":
     print("=" * 56 + "\n")
 
 
-# ============================================================
-# 🧠 Mentor Notes: Why OSINT Matters Alongside RAG
-# ============================================================
-#
-# THE GAP IN STATIC POLICY ANALYSIS
-# ──────────────────────────────────
-# The RAG agent searches your INTERNAL policy documents — the
-# vendor's published privacy policy, security whitepaper, etc.
-# But these documents are:
-#
-#   1. Self-reported — the vendor wrote them to look good.
-#   2. Point-in-time — they reflect policy at publication date.
-#   3. Aspirational — they describe what the vendor SAYS it does,
-#      not what it ACTUALLY does.
-#
-# A vendor's privacy policy might say "we encrypt all data at rest"
-# while a news article reveals they suffered a breach because
-# encryption wasn't actually implemented.
-#
-#
-# WHAT OSINT ADDS
-# ───────────────
-# The OSINT agent provides the EXTERNAL perspective:
-#
-#   • Data breaches:     Has this vendor been hacked?
-#   • Regulatory fines:  Has the FTC/GDPR/CCPA penalized them?
-#   • Lawsuits:          Are they being sued for data practices?
-#   • News coverage:     What does independent journalism say?
-#   • Public sentiment:  Are users/employees raising red flags?
-#
-# This creates a trust-but-verify dynamic:
-#
-#     RAG says:   "Policy states AES-256 encryption is used."
-#     OSINT says: "Company fined €50M for storing passwords in
-#                  plaintext (GDPR Article 32 violation)."
-#
-# The Judge agent can now weigh the internal claim against the
-# external evidence and assign a meaningful risk score.
-#
-#
-# WHY DUCKDUCKGO?
-# ───────────────
-# DuckDuckGo's search API is:
-#   • Free — no API key, no credit card, no rate-limit billing.
-#   • Privacy-preserving — no user tracking, appropriate for a
-#     compliance tool.
-#   • Good enough — for due diligence we need breadth (news,
-#     regulatory filings, breach databases), not perfect ranking.
-#
-# For production, you'd upgrade to Google Custom Search ($5/1000
-# queries) or a dedicated OSINT API like Shodan/GreyNoise, but
-# DuckDuckGo is perfect for a $0 budget MVP.
-#
-#
-# THE MULTI-QUERY STRATEGY
-# ────────────────────────
-# We run 3 separate searches per vendor instead of one because:
-#
-#   1. Search engines optimize for user intent — a single broad
-#      query returns general results (Wikipedia, company homepage).
-#   2. Targeted queries ("TikTok GDPR fine") surface specific risk
-#      signals that a broad query would bury on page 5.
-#   3. Different query angles cover different risk categories:
-#      breaches, regulatory actions, and privacy controversies.
-#
-# The deduplication step ensures the same URL found by multiple
-# queries is only passed to the Judge once.
-# ============================================================
+

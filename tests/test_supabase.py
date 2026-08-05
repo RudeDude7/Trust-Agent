@@ -1,15 +1,15 @@
-import os
-from supabase import create_client
+import os, sys
+sys.path.insert(0, 'backend')
 from dotenv import load_dotenv
+load_dotenv('.env')
+from supabase import create_client
 
-load_dotenv()
-supabase_url = os.environ.get("SUPABASE_URL")
-supabase_key = os.environ.get("SUPABASE_KEY")
-db = create_client(supabase_url, supabase_key)
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_KEY")
+db = create_client(url, key)
+
 try:
-    res = db.table("threat_alerts_missing").select("*").execute()
-    print("Success", res)
+    res = db.table("documents").select("id, metadata").eq("user_id", "00000000-0000-0000-0000-000000000000").execute()
+    print("Success:", res)
 except Exception as e:
-    print("Exception:", str(e))
-    import traceback
-    traceback.print_exc()
+    print("Error:", repr(e))

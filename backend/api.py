@@ -45,21 +45,17 @@ from state import VendorDueDiligenceState
 
 from redis import Redis
 from rq import Queue
-from ingest import process_ingestion_job
+from ingest import process_ingestion_job, get_embedding_model, get_supabase_client
 
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_conn = Redis.from_url(redis_url)
 ingest_queue = Queue('ingestion_queue', connection=redis_conn)
 
-# ---------------------------------------------------------------------------
 # Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("api")
 
-# ---------------------------------------------------------------------------
 # FastAPI App
-# ---------------------------------------------------------------------------
 app = FastAPI(
     title="Trust Agent - Vendor Due Diligence API",
     description="API for running automated vendor due diligence using LangGraph.",
@@ -97,9 +93,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 raise HTTPException(status_code=401, detail="Invalid authentication credentials")
             time.sleep(0.5)
 
-# ---------------------------------------------------------------------------
 # Startup: Compile the graph and warm up heavy models once
-# ---------------------------------------------------------------------------
 log.info("Compiling LangGraph pipeline...")
 graph_app = build_graph()
 log.info("Pipeline compiled successfully.")
@@ -108,17 +102,13 @@ log.info("Warming up embedding model for upload endpoint...")
 embedding_model = get_embedding_model()
 log.info("Embedding model ready.")
 
-# ---------------------------------------------------------------------------
 # Schemas
-# ---------------------------------------------------------------------------
 class AnalyzeRequest(BaseModel):
     vendor_name: str
     vendor_url: Optional[str] = None
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 1: Run the full due diligence pipeline
-# ═══════════════════════════════════════════════════════════════════════════
+# Run the full due diligence pipeline
 @app.post("/analyze")
 async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_current_user)):
     """
@@ -266,9 +256,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 2: Upload a PDF policy document for RAG ingestion
-# ═══════════════════════════════════════════════════════════════════════════
+# Upload a PDF policy document for RAG ingestion
 @app.post("/upload_policy")
 async def upload_policy(
     file: UploadFile = File(...),
@@ -343,9 +331,7 @@ async def upload_policy(
             os.remove(tmp_path)
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 2.5: SSE Progress Tracking for Uploads
-# ═══════════════════════════════════════════════════════════════════════════
+# SSE Progress Tracking for Uploads
 @app.get("/upload_progress/{job_id}")
 async def upload_progress(job_id: str):
     """
@@ -386,9 +372,7 @@ async def upload_progress(job_id: str):
         }
     )
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 3: Health check
-# ═══════════════════════════════════════════════════════════════════════════
+# Health check
 @app.get("/health")
 async def health_check():
     """Simple health check endpoint for Cloud Run / load balancers."""
@@ -537,9 +521,7 @@ Draft a highly professional, structured, and polite email addressed to the {vend
         raise HTTPException(status_code=500, detail="Failed to generate remediation draft.")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 6 & 7: Compliance Gap Matrix — gap action tracking
-# ═══════════════════════════════════════════════════════════════════════════
+# Compliance Gap Matrix — gap action tracking
 
 class GapStatusUpdate(BaseModel):
     session_id: str
@@ -631,9 +613,7 @@ async def get_gap_actions(session_id: str, user_id: str = Depends(get_current_us
         raise HTTPException(status_code=500, detail="Failed to fetch gap actions.")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 8: Policy Sandbox — "What-If" Analysis
-# ═══════════════════════════════════════════════════════════════════════════
+# Policy Sandbox — "What-If" Analysis
 
 class SandboxRequest(BaseModel):
     session_id: str
@@ -699,11 +679,8 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
         raise HTTPException(status_code=500, detail="Failed to run policy sandbox evaluation.")
 
 
-# ============================================================
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 9: Phase 4 — Live Threat & Breach Feed
-# ═══════════════════════════════════════════════════════════════════════════
+# Live Threat & Breach Feed
 
 class WatchVendorRequest(BaseModel):
     vendor_name: str
@@ -778,9 +755,7 @@ async def mark_alert_read(alert_id: str, user_id: str = Depends(get_current_user
         log.error(f"Failed to mark alert as read: {e}")
         raise HTTPException(status_code=500, detail="Failed to mark alert as read.")
 
-# ============================================================
-# Phase 5: Employees / Team Management
-# ============================================================
+# Employees / Team Management
 
 class EmployeeCreate(BaseModel):
     name: str

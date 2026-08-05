@@ -198,8 +198,8 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
         log.info("Judge Agent initial evaluation. Risk Level: %s (Confidence: %.2f)", 
                  result.overall_risk_level, result.confidence_score)
                  
-        # --- PHASE 3 GUARDRAIL: SELF-CORRECTION / HALLUCINATION CHECK ---
-        log.info("Running Verifier Guardrail to check for hallucinations...")
+        # --- Guardrail: Self-Correction / Hallucination Check ---
+        log.info("Running verification pass to check for hallucinations...")
         verifier_chain = VERIFIER_PROMPT | structured_llm
         
         verified_result: RiskAssessmentModel = cast(RiskAssessmentModel, verifier_chain.invoke({
@@ -294,50 +294,4 @@ if __name__ == "__main__":
     print("=" * 56 + "\n")
 
 
-# ============================================================
-# 🧠 Mentor Notes: Enforcing Structured Outputs
-# ============================================================
-#
-# THE CHALLENGE WITH LLMs
-# ───────────────────────
-# LLMs are trained to be helpful chatbots. By default, if you ask
-# them for JSON, they will wrap it in markdown code blocks:
-#
-#    Here is the JSON you requested:
-#    ```json
-#    { "risk_level": "HIGH" }
-#    ```
-#
-# This breaks downstream code (like `json.loads()`) that expects
-# raw, valid JSON. Parsing it manually with regex is brittle and
-# error-prone.
-#
-#
-# THE SOLUTION: PYDANTIC + STRUCTURED OUTPUT
-# ──────────────────────────────────────────
-# We use LangChain's `.with_structured_output(RiskAssessmentModel)`
-# alongside a Pydantic schema to solve this permanently.
-#
-# 1. Pydantic defines the exact shape, types, and descriptions of
-#    the data we want.
-# 2. Under the hood, LangChain translates this Pydantic schema into
-#    a JSON Schema and passes it to the LLM (for Gemini, via the
-#    `response_schema` parameter).
-# 3. The LLM's decoding process is constrained at the API level to
-#    ONLY output tokens that conform to that exact schema. No markdown,
-#    no conversational filler.
-# 4. LangChain automatically parses the raw JSON string back into a
-#    fully validated Python object (`RiskAssessmentModel`).
-#
-#
-# WHY IT MATTERS FOR BACKEND ENGINEERING
-# ──────────────────────────────────────
-# In a production AI application, the LLM is just another API
-# endpoint. You wouldn't tolerate a database that sometimes returns
-# SQL results wrapped in conversational text. You shouldn't tolerate
-# it from your LLMs either.
-#
-# Structured outputs turn non-deterministic text generators into
-# reliable, typed function calls that integrate seamlessly into
-# strict frontend interfaces and databases.
-# ============================================================
+

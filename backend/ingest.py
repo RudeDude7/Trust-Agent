@@ -128,7 +128,7 @@ def get_gemini_vision_model():
 # Pipeline stages
 # ---------------------------------------------------------------------------
 def load_pdf(pdf_path: Path, role: str, job_id: str = "") -> list[Document]:
-    """Stage 1: Load raw pages from the PDF and extract images/tables via Gemini VLM."""
+    """Extracts text, images, and tables from the PDF, leveraging Gemini for multimodal elements."""
     if not pdf_path.exists():
         log.error("PDF not found: %s", pdf_path)
         sys.exit(1)
@@ -190,7 +190,7 @@ def load_pdf(pdf_path: Path, role: str, job_id: str = "") -> list[Document]:
 
 def build_chunk_hierarchy(pages: list[Document], embedding_model: HuggingFaceEmbeddings) -> list[dict]:
     """
-    Stage 2: Split pages → parents → children using SemanticChunker.
+    Applies SemanticChunker to build a parent-child relationship map.
     """
     parent_splitter = SemanticChunker(
         embedding_model, breakpoint_threshold_type="percentile", breakpoint_threshold_amount=90
@@ -236,10 +236,8 @@ def generate_child_embeddings(
     model: HuggingFaceEmbeddings,
 ) -> None:
     """
-    Stage 3: Generate embeddings for every child chunk in-place.
-
-    Batches all child texts into a single call for efficiency — the
-    sentence-transformer model handles batching internally on CPU.
+    Generates vector embeddings for all child chunks in-place,
+    batching them efficiently for the local sentence-transformer.
     """
     all_texts: list[str] = []
     index_map: list[tuple[int, int]] = []   # (parent_idx, child_idx)
@@ -265,10 +263,8 @@ def insert_into_supabase(
     role: str
 ) -> None:
     """
-    Stage 4: Insert parents and children into Supabase.
-
-    First, purge any existing documents for this user and role to prevent
-    cross-audit contamination. Then insert parents (FK target), then children.
+    Purges old documents for this user/role, then inserts the new
+    parent documents followed by their embedded children.
     """
     # --- Purge old documents for this user and role ---
     log.info("Purging old '%s' documents for user %s ...", role, user_id)
@@ -405,54 +401,4 @@ if __name__ == "__main__":
     main()
 
 
-# ============================================================
-# 🧠 Mentor Notes: The Zero-Cost RAG Strategy
-# ============================================================
-#
-# Why local embeddings are a game-changer for bootstrapped projects:
-#
-# ┌────────────────────────┬──────────────────┬──────────────────┐
-# │                        │  Cloud API       │  Local Model     │
-# │                        │  (e.g. OpenAI)   │  (MiniLM-L6-v2)  │
-# ├────────────────────────┼──────────────────┼──────────────────┤
-# │ Cost per 1M tokens     │  ~$0.10–$0.13    │  $0.00           │
-# │ Cost for 10K documents │  ~$1–$5          │  $0.00           │
-# │ Cost for dev iteration │  Adds up fast    │  Always free     │
-# │ Latency                │  Network-bound   │  CPU-bound       │
-# │ Privacy                │  Data leaves     │  Data stays      │
-# │                        │  your machine    │  on your machine │
-# │ Offline dev            │  ✗ Needs WiFi    │  ✓ Works offline │
-# │ Quality (MTEB avg)     │  ~63 (ada-002)   │  ~59 (MiniLM)    │
-# └────────────────────────┴──────────────────┴──────────────────┘
-#
-# Key takeaways:
-#
-# 1. ITERATION COST IS THE REAL KILLER.
-#    During development you re-ingest the same documents dozens of times
-#    while tuning chunk sizes, overlap, metadata, and filtering logic.
-#    With cloud APIs, every re-run costs real money.  With a local model,
-#    you iterate freely — run it 100 times, pay $0.00.
-#
-# 2. THE QUALITY GAP IS SMALLER THAN YOU THINK.
-#    all-MiniLM-L6-v2 scores ~59 on the MTEB benchmark vs ~63 for
-#    OpenAI's ada-002.  For most retrieval tasks — especially when
-#    combined with the Parent Document Retriever pattern — this gap
-#    is negligible.  The architecture compensates.
-#
-# 3. DATA PRIVACY FOR FREE.
-#    Your PDF contents never leave your MacBook.  No terms-of-service
-#    to review, no data-processing agreements to sign.  For a vendor
-#    risk tool handling sensitive company data, this matters.
-#
-# 4. THE UPGRADE PATH IS CLEAN.
-#    If you later need higher-quality embeddings, swap the model name:
-#        EMBEDDING_MODEL = "all-MiniLM-L6-v2"       # free, 384-d
-#        EMBEDDING_MODEL = "all-mpnet-base-v2"       # free, 768-d, better quality
-#    Or switch to a cloud provider by changing one class:
-#        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-#    The rest of the pipeline stays identical.
-#
-# Bottom line: Use local embeddings while building.  Pay for cloud
-# embeddings only when you've proven the product works and the quality
-# delta actually matters for your users.
-# ============================================================
+
