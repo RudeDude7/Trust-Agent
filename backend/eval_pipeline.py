@@ -73,12 +73,18 @@ def main():
     print(f"Running lightweight RAG metrics via Ragas on the {args.tier.upper()} dataset...")
     print("(Metrics: Faithfulness, Answer Relevancy)")
     
+    from ragas.run_config import RunConfig
+    # Use max_workers=1 to prevent rate-limiting and timeouts on the free tier
+    # Increase timeout to 300s to give Gemini enough time to respond without timing out
+    run_config = RunConfig(timeout=300, max_workers=1)
+    
     try:
         result = evaluate(
             dataset = dataset,
             metrics=[faithfulness, answer_relevancy],
             llm=eval_llm,
-            embeddings=eval_embeddings
+            embeddings=eval_embeddings,
+            run_config=run_config
         )
     except Exception as e:
         print(f"Ragas evaluation failed: {e}")
