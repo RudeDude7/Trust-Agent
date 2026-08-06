@@ -179,6 +179,8 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         temperature=0.0,
+        timeout=60,
+        max_retries=2
     )
 
     # Enforce Pydantic schema

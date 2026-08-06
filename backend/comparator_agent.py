@@ -277,7 +277,7 @@ VENDOR POLICIES:
 Extract specific discrepancies where the vendor fails to meet internal requirements, and generate a structured compliance matrix.
 """
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, timeout=60, max_retries=2)
     structured_llm = llm.with_structured_output(ComplianceAnalysis)
     
     try:

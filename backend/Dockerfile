@@ -22,6 +22,14 @@ embeddings = HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2'); \
 print('Model successfully cached in the Docker image!')\
 "
 
+# Pre-download cross-encoder model to prevent runtime downloads
+RUN python -c "\
+from sentence_transformers import CrossEncoder; \
+print('Downloading and caching cross-encoder...'); \
+encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512); \
+print('Cross-encoder successfully cached in the Docker image!')\
+"
+
 COPY . .
 
 EXPOSE 8080
