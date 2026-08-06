@@ -73,6 +73,7 @@ class VendorDueDiligenceState(TypedDict):
     # ── 3. Comparator Stage (formerly RAG) ─────────────────────
     rag_findings: Annotated[list[str], operator.add]            # Identified discrepancies and policy gaps
     compliance_matrix: dict                                     # Structured mapping of internal vs vendor policies
+    raw_rag_clauses: Annotated[list[dict], operator.add]        # Raw chunks for Sandbox What-If simulation
 
     # ── 4. Judge Stage ─────────────────────────────────────────
     risk_assessment: RiskAssessment | None                      # final structured verdict

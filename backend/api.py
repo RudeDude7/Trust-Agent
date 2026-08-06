@@ -129,6 +129,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
             final_assessment = None
             raw_osint = []
             raw_rag = []
+            raw_rag_clauses = []
             
             # Stream events as nodes complete
             async for event in graph_app.astream(initial_state, stream_mode="updates"):
@@ -140,6 +141,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
                     elif node_name == "comparator_agent":
                         msg = "[Comparator Agent] Extracted policy discrepancies..."
                         raw_rag = state_update.get("rag_findings", [])
+                        raw_rag_clauses = state_update.get("raw_rag_clauses", [])
                     elif node_name == "judge_agent":
                         msg = "[Judge Agent] Finalizing risk assessment..."
                         final_assessment = state_update.get("risk_assessment")
@@ -153,6 +155,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
             # Attach raw data for sandbox what-if analysis
             final_assessment["raw_osint_findings"] = raw_osint
             final_assessment["rag_findings"] = raw_rag
+            final_assessment["raw_rag_clauses"] = raw_rag_clauses
 
             # Deduplication and Versioning Logic
             db = get_supabase_client()

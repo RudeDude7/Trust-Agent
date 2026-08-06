@@ -252,14 +252,33 @@ def comparator_agent_node(state: VendorDueDiligenceState) -> dict:
 
     internal_docs = []
     vendor_docs = []
+    raw_rag_clauses = []
     
     for doc in final_internal_docs:
         parent_text, is_orphan = _fetch_parent_context(db, str(doc.metadata.get("document_id", "")))
-        internal_docs.append(parent_text if parent_text and not is_orphan else doc.page_content)
+        clause = doc.page_content
+        source = doc.metadata.get("source", "Internal Policy")
+        final_text = parent_text if parent_text and not is_orphan else clause
+        internal_docs.append(final_text)
+        raw_rag_clauses.append({
+            "clause_text": clause,
+            "parent_context": final_text,
+            "role": "internal",
+            "source": source
+        })
         
     for doc in final_vendor_docs:
         parent_text, is_orphan = _fetch_parent_context(db, str(doc.metadata.get("document_id", "")))
-        vendor_docs.append(parent_text if parent_text and not is_orphan else doc.page_content)
+        clause = doc.page_content
+        source = doc.metadata.get("source", "Vendor Policy")
+        final_text = parent_text if parent_text and not is_orphan else clause
+        vendor_docs.append(final_text)
+        raw_rag_clauses.append({
+            "clause_text": clause,
+            "parent_context": final_text,
+            "role": "vendor",
+            "source": source
+        })
 
     internal_text = "\n\n---\n\n".join(internal_docs)
     vendor_text = "\n\n---\n\n".join(vendor_docs)
@@ -294,4 +313,5 @@ Extract specific discrepancies where the vendor fails to meet internal requireme
     return {
         "rag_findings": findings,
         "compliance_matrix": matrix,
+        "raw_rag_clauses": raw_rag_clauses,
     }
