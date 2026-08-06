@@ -92,11 +92,29 @@ def main():
         
     print(f"\nEvaluation Results (Raw):\n{result}")
     
+    # Print the full dataframe to debug Faithfulness scoring
+    try:
+        import pandas as pd
+        df = result.to_pandas()
+        print("\n=== DEBUG: Full Evaluation DataFrame ===")
+        for record in df.to_dict('records'):
+            print(record)
+        print("========================================\n")
+    except Exception as e:
+        print(f"Failed to print debug dataframe: {e}")
+        
     # Extract the scores safely
     def safe_get(res, key):
         try:
             val = res[key]
             import math
+            # Ragas 0.2.x returns a list of scores for each row
+            if isinstance(val, list):
+                valid_scores = [v for v in val if not math.isnan(v)]
+                if not valid_scores:
+                    return 0.0
+                return sum(valid_scores) / len(valid_scores)
+            # Fallback if it returns a single float
             return 0.0 if math.isnan(val) else val
         except Exception:
             return 0.0
