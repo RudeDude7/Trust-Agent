@@ -16,10 +16,10 @@ import logging
 import re
 from typing import Any
 import math
+import os
 from datetime import datetime, timezone
 
-from duckduckgo_search import DDGS
-from duckduckgo_search.exceptions import DuckDuckGoSearchException as DDGSException, RatelimitException
+import wikipedia
 
 from state import OSINTFinding, VendorDueDiligenceState
 
@@ -168,33 +168,54 @@ def _score_relevance(title: str, snippet: str, vendor: str, date_str: str = "") 
 
 
 # Core search logic
-def _search_duckduckgo(query: str) -> list[dict[str, Any]]:
+def _search_osint(query: str, vendor: str) -> list[dict[str, Any]]:
     """
-    Executes a DuckDuckGo news search and returns raw result dicts.
-
+    Executes an OSINT search using Tavily (if API key present) or Wikipedia (fallback).
     Each result has keys: 'title', 'url', 'body', 'date'.
-    Returns an empty list on failure (network errors, rate limits, etc.).
     """
+    results = []
+    
+    # 1. Try Tavily Search API
+    tavily_key = os.environ.get("TAVILY_API_KEY")
+    if tavily_key:
+        try:
+            from tavily import TavilyClient
+            client = TavilyClient(api_key=tavily_key)
+            # Use basic search depth for speed
+            response = client.search(query, search_depth="basic", max_results=MAX_RESULTS)
+            for item in response.get("results", []):
+                results.append({
+                    "title": str(item.get("title", "")),
+                    "url": str(item.get("url", "")),
+                    "body": str(item.get("content", "")),
+                    "date": ""
+                })
+            log.info("  ↳ Query \"%s\" → %d results via Tavily", query[:60], len(results))
+            return results
+        except Exception as exc:
+            log.warning("Tavily search failed for \"%s\": %s. Falling back to Wikipedia.", query[:60], exc)
+
+    # 2. Fallback to Wikipedia Search
     try:
-        ddgs = DDGS()
-        results: list[dict[str, Any]] = ddgs.news(
-            query,
-            region=SEARCH_REGION,
-            max_results=MAX_RESULTS,
-        )
-        log.info("  ↳ Query \"%s\" → %d results", query[:60], len(results))
+        # For Wikipedia, we search the vendor name directly rather than complex OSINT queries
+        search_results = wikipedia.search(vendor, results=2)
+        for page_title in search_results:
+            try:
+                page = wikipedia.page(page_title, auto_suggest=False)
+                # Extract a concise snippet
+                snippet = page.summary[:500] + "..." if len(page.summary) > 500 else page.summary
+                results.append({
+                    "title": f"Wikipedia: {page.title}",
+                    "url": page.url,
+                    "body": snippet,
+                    "date": ""
+                })
+            except Exception:
+                continue
+        log.info("  ↳ Query \"%s\" → %d results via Wikipedia", query[:60], len(results))
         return results
-
-    except RatelimitException:
-        log.warning("DuckDuckGo rate limit hit for \"%s\". Skipping.", query[:60])
-        return []
-
-    except DDGSException as exc:
-        log.warning("DuckDuckGo search failed for \"%s\": %s", query[:60], exc)
-        return []
-
     except Exception as exc:
-        log.error("Unexpected error during search: %s", exc)
+        log.error("Wikipedia fallback failed: %s", exc)
         return []
 
 
@@ -236,7 +257,7 @@ def osint_agent_node(state: VendorDueDiligenceState) -> dict:
         query: str = template.format(vendor=vendor)
         log.info("Searching: \"%s\"", query)
 
-        raw_results: list[dict[str, Any]] = _search_duckduckgo(query)
+        raw_results: list[dict[str, Any]] = _search_osint(query, vendor)
 
         for result in raw_results:
             title: str = str(result.get("title", ""))
