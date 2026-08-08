@@ -88,19 +88,33 @@ def _get_cross_encoder() -> CrossEncoder:
     _cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", max_length=512)
     return _cross_encoder
 
+# Deterministic keyword expansion — covers the same ground as the old LLM
+# rewrite but costs $0 and never rate-limits or fails.
+_EXPANSION_MAP: dict[str, list[str]] = {
+    "security": ["cybersecurity", "infosec", "information security", "SOC 2", "ISO 27001"],
+    "data protection": ["data privacy", "data handling", "data processing", "GDPR", "CCPA", "PII"],
+    "encryption": ["AES-256", "TLS", "at-rest encryption", "in-transit encryption", "key management", "cryptographic"],
+    "access control": ["RBAC", "MFA", "multi-factor authentication", "IAM", "privileged access", "least privilege", "zero trust"],
+    "vendor compliance": ["third-party risk", "vendor risk management", "subprocessor", "supply chain security", "SLA"],
+    "incident response": ["breach notification", "disaster recovery", "business continuity", "BCP", "DRP", "SIEM"],
+    "audit": ["audit logging", "monitoring", "log retention", "audit trail", "compliance audit"],
+    "data retention": ["data deletion", "data lifecycle", "retention policy", "right to erasure"],
+}
 
 def _rewrite_query(vendor: str) -> str:
-    """Uses an LLM to expand the static query into an optimized Hybrid Search query."""
-    prompt = f"We are auditing the vendor '{vendor}'. Expand the following base topics into a highly descriptive search query containing relevant cybersecurity keywords, acronyms, and synonyms for retrieving policies. Base topics: {DEFAULT_RAG_QUERY}. Output only the query string without quotes or preamble."
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
-    try:
-        response = llm.invoke(prompt)
-        rewritten = response.content.strip()
-        log.info("Query rewritten via LLM: %s", rewritten)
-        return rewritten
-    except Exception as e:
-        log.warning("Query rewriting failed: %s. Falling back to default query.", e)
-        return DEFAULT_RAG_QUERY
+    """
+    Deterministic query expansion — builds a rich hybrid-search query from
+    static keyword mappings. Replaces the old LLM-based rewrite to save
+    one Gemini call per analysis (25% budget reduction).
+    """
+    parts = [vendor]
+    for base_term, expansions in _EXPANSION_MAP.items():
+        parts.append(base_term)
+        parts.extend(expansions[:3])  # top 3 expansions per category to keep query focused
+
+    query = " ".join(parts)
+    log.info("Deterministic query expansion: %s", query[:120])
+    return query
 
 def _retrieve_chunks(query_text: str, user_id: str) -> list[tuple[Document, float]]:
     db: Client = _get_supabase_client()
