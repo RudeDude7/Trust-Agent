@@ -626,8 +626,8 @@ class SandboxRequest(BaseModel):
 @app.post("/sandbox_evaluate")
 async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_current_user)):
     """
-    Re-runs the Judge Agent simulation by filtering out specific internal RAG 
-    clauses that the user has toggled off in the Policy Sandbox.
+    Re-runs the Comparator + Judge simulation by filtering out specific internal
+    RAG clauses that the user has toggled off in the Policy Sandbox.
     Does NOT save the result; just returns the simulated risk assessment.
     """
     try:
@@ -641,19 +641,33 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
         risk = audit["risk_assessment"]
 
         raw_osint = risk.get("raw_osint_findings", [])
-        raw_rag = risk.get("rag_findings", [])
+        raw_rag_clauses = risk.get("raw_rag_clauses", [])
 
-        if not raw_rag and not raw_osint:
-            raise HTTPException(status_code=400, detail="This audit is too old and lacks raw data for sandbox simulation. Please re-run the analysis first.")
+        if not raw_rag_clauses and not raw_osint:
+            raise HTTPException(status_code=400, detail="This audit lacks raw data for sandbox simulation. Please re-run the analysis.")
 
-        # Filter out the disabled clauses (which are strings now)
-        filtered_rag = []
-        for clause in raw_rag:
-            if clause not in request.disabled_clauses:
-                filtered_rag.append(clause)
+        # Filter out disabled INTERNAL clauses by matching on clause_text
+        disabled_set = set(request.disabled_clauses)
+        surviving_clauses = [
+            c for c in raw_rag_clauses
+            if not (c.get("role") == "internal" and c.get("clause_text") in disabled_set)
+        ]
 
-        # Re-run the judge agent
-        from state import VendorDueDiligenceState
+        # Rebuild policy text from surviving clauses
+        internal_text = "\n\n---\n\n".join(
+            c.get("parent_context") or c.get("clause_text", "")
+            for c in surviving_clauses if c.get("role") == "internal"
+        )
+        vendor_text = "\n\n---\n\n".join(
+            c.get("parent_context") or c.get("clause_text", "")
+            for c in surviving_clauses if c.get("role") == "vendor"
+        )
+
+        # Re-run the comparator's LLM analysis on filtered clauses
+        from comparator_agent import run_policy_comparison
+        findings, matrix = run_policy_comparison(vendor_name, internal_text, vendor_text)
+
+        # Re-run the judge with fresh findings
         from judge_agent import judge_agent_node
 
         mock_state: VendorDueDiligenceState = {
@@ -662,8 +676,9 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
             "vendor_url": "",
             "osint_findings": raw_osint,
             "osint_summary": "",
-            "rag_findings": filtered_rag,
-            "compliance_matrix": {},
+            "rag_findings": findings,
+            "compliance_matrix": matrix,
+            "raw_rag_clauses": surviving_clauses,
             "risk_assessment": None,
             "judge_reasoning": ""
         }
@@ -680,8 +695,6 @@ async def sandbox_evaluate(request: SandboxRequest, user_id: str = Depends(get_c
     except Exception as e:
         log.error("Failed to run sandbox evaluation: %s", e)
         raise HTTPException(status_code=500, detail="Failed to run policy sandbox evaluation.")
-
-
 
 # Live Threat & Breach Feed
 

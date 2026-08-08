@@ -164,6 +164,34 @@ class ComplianceAnalysis(BaseModel):
     findings: list[str] = Field(description="List of specific discrepancies and policy gaps identified")
     matrix: dict[str, Any] = Field(description="Structured dictionary mapping compliance categories (e.g., 'Encryption', 'Access Control') to their status and details")
 
+def run_policy_comparison(vendor: str, internal_text: str, vendor_text: str) -> tuple[list[str], dict]:
+    """
+    Runs only the LLM comparison step of the comparator pipeline.
+    Reusable by both the main pipeline and the Policy Sandbox.
+    Returns (findings, compliance_matrix).
+    """
+    prompt = f"""
+You are a Lead Security Architect performing Vendor Due Diligence for {vendor}.
+Compare the following Internal Policies against the Vendor's Policies.
+
+INTERNAL POLICIES:
+{internal_text if internal_text else "None provided."}
+
+VENDOR POLICIES:
+{vendor_text if vendor_text else "None provided."}
+
+Extract specific discrepancies where the vendor fails to meet internal requirements, and generate a structured compliance matrix.
+"""
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, timeout=60, max_retries=2)
+    structured_llm = llm.with_structured_output(ComplianceAnalysis)
+
+    try:
+        analysis: ComplianceAnalysis = structured_llm.invoke(prompt)
+        return analysis.findings, analysis.matrix
+    except Exception as e:
+        log.error("LLM policy comparison failed: %s", e)
+        return [f"Failed to analyze policies: {e}"], {}
+
 def comparator_agent_node(state: VendorDueDiligenceState) -> dict:
     """
     Comparator agent node for the LangGraph pipeline.
@@ -283,31 +311,7 @@ def comparator_agent_node(state: VendorDueDiligenceState) -> dict:
     internal_text = "\n\n---\n\n".join(internal_docs)
     vendor_text = "\n\n---\n\n".join(vendor_docs)
 
-    prompt = f"""
-You are a Lead Security Architect performing Vendor Due Diligence for {vendor}.
-Compare the following Internal Policies against the Vendor's Policies.
-
-INTERNAL POLICIES:
-{internal_text if internal_text else "None provided."}
-
-VENDOR POLICIES:
-{vendor_text if vendor_text else "None provided."}
-
-Extract specific discrepancies where the vendor fails to meet internal requirements, and generate a structured compliance matrix.
-"""
-
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, timeout=60, max_retries=2)
-    structured_llm = llm.with_structured_output(ComplianceAnalysis)
-    
-    try:
-        analysis: ComplianceAnalysis = structured_llm.invoke(prompt)
-        findings = analysis.findings
-        matrix = analysis.matrix
-    except Exception as e:
-        log.error(f"LLM analysis failed: {e}")
-        findings = [f"Failed to analyze policies: {e}"]
-        matrix = {}
-
+    findings, matrix = run_policy_comparison(vendor, internal_text, vendor_text)
     log.info(f"Comparator found {len(findings)} discrepancies.")
     
     return {
