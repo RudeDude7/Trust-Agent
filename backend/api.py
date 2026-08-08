@@ -263,6 +263,7 @@ async def analyze_vendor(request: AnalyzeRequest, user_id: str = Depends(get_cur
 async def upload_policy(
     file: UploadFile = File(...),
     role: str = Form(...),
+    vendor_name: str = Form(""),
     user_id: str = Depends(get_current_user)
 ):
     """
@@ -311,6 +312,7 @@ async def upload_policy(
             tmp_path, 
             role, 
             user_id, 
+            vendor_name,
             job_timeout=3600
         )
 

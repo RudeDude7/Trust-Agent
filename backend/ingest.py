@@ -123,7 +123,7 @@ def get_gemini_vision_model():
 # ---------------------------------------------------------------------------
 # Pipeline stages
 # ---------------------------------------------------------------------------
-def load_pdf(pdf_path: Path, role: str, job_id: str = "") -> list[Document]:
+def load_pdf(pdf_path: Path, role: str, vendor_name: str = "", job_id: str = "") -> list[Document]:
     """Extracts text, images, and tables from the PDF, leveraging Gemini for multimodal elements."""
     if not pdf_path.exists():
         log.error("PDF not found: %s", pdf_path)
@@ -177,7 +177,7 @@ def load_pdf(pdf_path: Path, role: str, job_id: str = "") -> list[Document]:
                 
         # Create Document with normalized text and rich metadata
         clean_text = text.replace('\\x00', '').strip()
-        metadata = {"role": role, "page": page_num + 1, "source": str(pdf_path)}
+        metadata = {"role": role, "page": page_num + 1, "source": str(pdf_path), "vendor_name": vendor_name}
         pages.append(Document(page_content=clean_text, metadata=metadata))
         
     log.info("Loaded %d raw pages from %s (role: %s)", len(pages), pdf_path.name, role)
@@ -256,19 +256,24 @@ def insert_into_supabase(
     hierarchy: list[dict],
     db: Client,
     user_id: str,
-    role: str
+    role: str,
+    vendor_name: str = ""
 ) -> None:
     """
     Purges old documents for this user/role, then inserts the new
     parent documents followed by their embedded children.
     """
     # --- Purge old documents for this user and role ---
-    log.info("Purging old '%s' documents for user %s ...", role, user_id)
+    log.info("Purging old '%s' documents (vendor: '%s') for user %s ...", role, vendor_name or "all", user_id)
     # Supabase Python client doesn't support complex JSONB filtering easily, 
     # but we can filter by user_id and then use metadata->>'role' = role via PostgREST textSearch or similar.
     # Actually, the simplest way is to fetch the IDs and delete them.
     res = db.table("documents").select("id, metadata").eq("user_id", user_id).execute()
-    old_docs = [d["id"] for d in (res.data or []) if d.get("metadata", {}).get("role") == role]
+    old_docs = [
+        d["id"] for d in (res.data or [])
+        if d.get("metadata", {}).get("role") == role
+        and d.get("metadata", {}).get("vendor_name", "") == vendor_name
+    ]
     if old_docs:
         log.info("Found %d old '%s' documents. Deleting...", len(old_docs), role)
         # Delete in batches of 100 to be safe
@@ -314,7 +319,7 @@ def insert_into_supabase(
     log.info("✅  Ingestion complete.")
 
 
-def process_ingestion_job(tmp_path: str, role: str, user_id: str, job_id: str = "") -> None:
+def process_ingestion_job(tmp_path: str, role: str, user_id: str, vendor_name: str = "", job_id: str = "") -> None:
     """Async worker function to process ingestion from RQ queue."""
     log.info("Starting background ingestion for role: %s, user: %s", role, user_id)
     
@@ -329,7 +334,7 @@ def process_ingestion_job(tmp_path: str, role: str, user_id: str, job_id: str = 
         embedding_model = get_embedding_model()
         
         publish_progress(job_id, 5, "Loading PDF and extracting images/tables via Gemini...")
-        pages = load_pdf(Path(tmp_path), role, job_id=job_id)
+        pages = load_pdf(Path(tmp_path), role, vendor_name=vendor_name, job_id=job_id)
         if not pages:
             log.error("PDF is empty or unreadable.")
             publish_progress(job_id, -1, "Error: PDF is empty or unreadable.")
@@ -342,7 +347,7 @@ def process_ingestion_job(tmp_path: str, role: str, user_id: str, job_id: str = 
         generate_child_embeddings(hierarchy, embedding_model)
         
         publish_progress(job_id, 85, "Uploading vectors to Supabase database...")
-        insert_into_supabase(hierarchy, db, user_id, role)
+        insert_into_supabase(hierarchy, db, user_id, role, vendor_name=vendor_name)
         
         publish_progress(job_id, 100, "Ingestion Complete!")
         log.info("✅ Async ingestion job complete for user %s", user_id)
@@ -390,7 +395,7 @@ def main() -> None:
     pages: list[Document] = load_pdf(args.pdf, args.role, job_id="")
     hierarchy: list[dict] = build_chunk_hierarchy(pages, embedding_model)
     generate_child_embeddings(hierarchy, embedding_model)
-    insert_into_supabase(hierarchy, db, "00000000-0000-0000-0000-000000000000", args.role)
+    insert_into_supabase(hierarchy, db, "00000000-0000-0000-0000-000000000000", args.role, vendor_name="CLI_Test")
 
 
 if __name__ == "__main__":

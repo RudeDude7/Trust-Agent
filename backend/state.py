@@ -28,6 +28,7 @@ class OSINTFinding(TypedDict):
     snippet: str                    # relevant excerpt from the source
     relevance_score: float          # 0.0 – 1.0, how relevant to the query
     finding_type: str               # e.g. "news_article", "regulatory_filing", "breach_report"
+    date: str                       # NEW — ISO date string, used for recency decay
 
 
 class RiskAssessment(TypedDict):

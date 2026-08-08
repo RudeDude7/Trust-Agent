@@ -1,13 +1,14 @@
-# pip install ddgs langchain-community
+# pip install tavily-python wikipedia
 """
 osint_agent.py — OSINT Agent Node for the Vendor Due Diligence Pipeline
 
-Performs open-source intelligence gathering via DuckDuckGo web search.
-Searches for data breaches, regulatory fines, and security incidents
-associated with a vendor, then maps the results into the OSINTFinding
-format defined in state.py.
+Performs open-source intelligence (OSINT) gathering using the Tavily Search
+API (preferred) with automatic fallback to Wikipedia. Searches for data
+breaches, regulatory fines, and security incidents associated with a vendor,
+then maps the results into the OSINTFinding format defined in state.py.
 
-Zero-cost: DuckDuckGo requires no API key and no paid subscription.
+Requires: TAVILY_API_KEY environment variable for live web search.
+Without it, the agent falls back to Wikipedia automatically.
 """
 
 from __future__ import annotations
@@ -19,9 +20,14 @@ import math
 import os
 from datetime import datetime, timezone
 
+from dotenv import load_dotenv
+from tavily import TavilyClient
 import wikipedia
 
 from state import OSINTFinding, VendorDueDiligenceState
+
+# Load environment variables (including TAVILY_API_KEY) from .env in local dev
+load_dotenv()
 
 # Logging
 logging.basicConfig(
@@ -179,21 +185,20 @@ def _search_osint(query: str, vendor: str) -> list[dict[str, Any]]:
     tavily_key = os.environ.get("TAVILY_API_KEY")
     if tavily_key:
         try:
-            from tavily import TavilyClient
             client = TavilyClient(api_key=tavily_key)
-            # Use basic search depth for speed
+            # Use basic search depth for speed and cost
             response = client.search(query, search_depth="basic", max_results=MAX_RESULTS)
             for item in response.get("results", []):
                 results.append({
                     "title": str(item.get("title", "")),
                     "url": str(item.get("url", "")),
                     "body": str(item.get("content", "")),
-                    "date": ""
+                    "date": str(item.get("published_date", ""))
                 })
             log.info("  ↳ Query \"%s\" → %d results via Tavily", query[:60], len(results))
             return results
         except Exception as exc:
-            log.warning("Tavily search failed for \"%s\": %s. Falling back to Wikipedia.", query[:60], exc)
+            log.warning("Tavily search failed for \"%s\": %s. Falling back to Wikipedia.", query[:60], exc, exc_info=True)
 
     # 2. Fallback to Wikipedia Search
     try:
@@ -274,6 +279,7 @@ def osint_agent_node(state: VendorDueDiligenceState) -> dict:
                 "snippet":         snippet[:500],  # cap length for the LLM context window
                 "relevance_score": _score_relevance(title, snippet, vendor, date_str),
                 "finding_type":    _classify_finding(title, snippet),
+                "date":            date_str,
             }
             all_findings.append(finding)
 

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
-
+from risk_scoring import compute_overall_risk
 from state import VendorDueDiligenceState
 
 # Load API keys (e.g. GOOGLE_API_KEY)
@@ -70,14 +70,17 @@ JUDGE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are a Senior Risk and Compliance Officer performing vendor due diligence.
 Your job is to evaluate a vendor's risk profile by performing a Comparative Analysis. You must cross-reference their internal stated policies against our company's internal policies (provided in the Compliance Matrix and RAG Findings), and against external reality (OSINT Findings).
 
-Analyze the provided inputs and determine the risk level:
-- LOW: No major breaches or regulatory actions, strong policies aligned with ours.
-- MEDIUM: Minor incidents or vague policies, minor misalignment.
-- HIGH: Significant past breaches, regulatory fines, or alarming discrepancies between our policy and the vendor's policy.
-- CRITICAL: Active existential risks, bankruptcy, massive unmitigated breaches.
+A deterministic risk score has already been computed independently from the raw evidence — treat it as ground truth. Your job is NOT to invent your own risk level. Set `overall_risk_level` to exactly the provided computed level, and set `confidence_score` to exactly the provided value. Your `summary`, `comparative_analysis`, `osint_inferences`, and `rag_inferences` must explain and justify this score using the evidence given — do not contradict it.
 
-You must explicitly separate your findings into `osint_inferences` (from news/web) and `rag_inferences` (from policy text). In your `comparative_analysis`, explicitly state how the vendor's policy compares to the internal policy. Rely ONLY on the provided RAG and OSINT data."""),
+You must explicitly separate your findings into `osint_inferences` (from news/web) and `rag_inferences` (from policy text). Rely ONLY on the provided RAG and OSINT data."""),
     ("user", """Vendor Name: {vendor_name}
+
+=== DETERMINISTIC RISK SCORE (COMPUTED INDEPENDENTLY — GROUND TRUTH) ===
+Composite Score: {composite_score}/100
+Risk Level: {computed_level}
+Confidence: {computed_confidence}
+OSINT Component: {osint_component_score}/100 ({osint_finding_count} findings, categories: {categories_involved})
+Compliance Component: {compliance_component_score}/100 (method: {compliance_method})
 
 === INTERNAL POLICIES (COMPLIANCE MATRIX & FINDINGS) ===
 {rag_text}
@@ -85,7 +88,7 @@ You must explicitly separate your findings into `osint_inferences` (from news/we
 === EXTERNAL NEWS (OSINT FINDINGS) ===
 {osint_findings}
 
-Evaluate the vendor and provide the final structured risk assessment.""")
+Evaluate the vendor and provide the final structured risk assessment, consistent with the computed score above.""")
 ])
 
 VERIFIER_PROMPT = ChatPromptTemplate.from_messages([
@@ -149,18 +152,10 @@ def _sanitize_prompt_injection(findings: list[dict]) -> list[dict]:
 # LangGraph node function
 # ---------------------------------------------------------------------------
 def judge_agent_node(state: VendorDueDiligenceState) -> dict:
-    """
-    Judge agent node for the LangGraph pipeline.
-
-    1. Formats RAG clauses and OSINT findings into text.
-    2. Constructs the prompt for the LLM.
-    3. Calls Gemini using structured output to enforce the schema.
-    4. Returns the validated JSON payload to the state.
-    """
     vendor: str = state.get("vendor_name", "unknown vendor")
     rag_findings = state.get("rag_findings", [])
     compliance_matrix = state.get("compliance_matrix", {})
-    
+
     raw_osint = state.get("osint_findings", [])
     osint_findings = _sanitize_prompt_injection(raw_osint) if raw_osint else []
 
@@ -168,42 +163,45 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
     log.info("Judge Agent activated for vendor: %s", vendor)
     log.info("=" * 50)
 
-    # Format inputs for the prompt
+    # --- Deterministic scoring pass, computed BEFORE the LLM sees anything ---
+    risk_calc = compute_overall_risk(osint_findings, compliance_matrix, rag_findings)
+    log.info(
+        "Deterministic risk score: %.1f/100 -> %s (confidence %.2f)",
+        risk_calc["composite_score"], risk_calc["overall_risk_level"], risk_calc["confidence_score"]
+    )
+
     rag_data = {"findings": rag_findings, "matrix": compliance_matrix}
     rag_text = json.dumps(rag_data, indent=2) if rag_findings or compliance_matrix else "No internal policies found."
     osint_text = json.dumps(osint_findings, indent=2) if osint_findings else "No external news found."
+    log.info("OSINT payload sent to Judge (first 300 chars): %s", osint_text[:300])
 
-    log.info("Analyzing %d RAG findings and %d OSINT findings...", len(rag_findings), len(osint_findings))
-
-    # Initialize the LLM
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=0.0,
-        timeout=60,
-        max_retries=2
-    )
-
-    # Enforce Pydantic schema
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0, timeout=60, max_retries=2)
     structured_llm = llm.with_structured_output(RiskAssessmentModel)
-
-    # Create the chain
     chain = JUDGE_PROMPT | structured_llm
 
+    prompt_vars = {
+        "vendor_name": vendor,
+        "rag_text": rag_text,
+        "osint_findings": osint_text,
+        "composite_score": risk_calc["composite_score"],
+        "computed_level": risk_calc["overall_risk_level"],
+        "computed_confidence": risk_calc["confidence_score"],
+        "osint_component_score": risk_calc["osint_component"]["score"],
+        "osint_finding_count": risk_calc["osint_component"]["finding_count"],
+        "categories_involved": ", ".join(risk_calc["osint_component"]["categories_involved"]) or "none",
+        "compliance_component_score": risk_calc["compliance_component"]["score"],
+        "compliance_method": risk_calc["compliance_component"]["method"],
+    }
+
     try:
-        # Execute the chain
-        result: RiskAssessmentModel = cast(RiskAssessmentModel, chain.invoke({
-            "vendor_name": vendor,
-            "rag_text": rag_text,
-            "osint_findings": osint_text
-        }))
-        
-        log.info("Judge Agent initial evaluation. Risk Level: %s (Confidence: %.2f)", 
-                 result.overall_risk_level, result.confidence_score)
-                 
-        # --- Guardrail: Self-Correction / Hallucination Check ---
+        result: RiskAssessmentModel = cast(RiskAssessmentModel, chain.invoke(prompt_vars))
+
+        log.info("Judge Agent initial evaluation. Risk Level: %s (Confidence: %.2f)",
+                  result.overall_risk_level, result.confidence_score)
+
         log.info("Running verification pass to check for hallucinations...")
         verifier_chain = VERIFIER_PROMPT | structured_llm
-        
+
         verified_result: RiskAssessmentModel = cast(RiskAssessmentModel, verifier_chain.invoke({
             "osint_findings": osint_text,
             "rag_text": rag_text,
@@ -215,34 +213,35 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
             "comparative_analysis": result.comparative_analysis,
             "data_gaps": json.dumps(result.data_gaps)
         }))
-        
-        if (verified_result.osint_inferences != result.osint_inferences or 
-            verified_result.rag_inferences != result.rag_inferences):
-            log.warning("Hallucinations detected and stripped! Corrected Risk Level: %s", verified_result.overall_risk_level)
-        else:
-            log.info("Guardrail passed: No hallucinations detected.")
-            
+
+        # Deterministic values are authoritative — override whatever the LLM produced.
+        verified_result.overall_risk_level = risk_calc["overall_risk_level"]
+        verified_result.confidence_score = risk_calc["confidence_score"]
+
+        result_dict = verified_result.model_dump()
+        result_dict["risk_score_breakdown"] = risk_calc  # exposed for transparency/debugging in the UI later
+
         return {
-            "risk_assessment": verified_result.model_dump(),
-            "judge_reasoning": "Assessment generated and verified successfully."
+            "risk_assessment": result_dict,
+            "judge_reasoning": f"Deterministic composite score: {risk_calc['composite_score']}/100 "
+                                f"(OSINT {risk_calc['osint_component']['score']}, "
+                                f"Compliance {risk_calc['compliance_component']['score']})."
         }
-        
+
     except Exception as exc:
         log.error("Failed to generate risk assessment: %s", exc)
-        # Fallback payload to keep the graph running
         fallback = RiskAssessmentModel(
-            overall_risk_level="CRITICAL",
-            confidence_score=0.0,
-            summary=f"Analysis failed due to error: {exc}",
-            osint_inferences=["LLM Failure"],
-            rag_inferences=["LLM Failure"],
+            overall_risk_level=risk_calc["overall_risk_level"],
+            confidence_score=risk_calc["confidence_score"],
+            summary=f"Narrative generation failed due to error: {exc}. Deterministic score was {risk_calc['composite_score']}/100.",
+            osint_inferences=["LLM narrative generation failed — see deterministic score breakdown."],
+            rag_inferences=["LLM narrative generation failed — see deterministic score breakdown."],
             comparative_analysis="Failed to generate comparative analysis due to an error.",
-            data_gaps=["Complete assessment failure"]
+            data_gaps=["Narrative generation failure"]
         )
-        return {
-            "risk_assessment": fallback.model_dump(),
-            "judge_reasoning": f"Error: {exc}"
-        }
+        result_dict = fallback.model_dump()
+        result_dict["risk_score_breakdown"] = risk_calc
+        return {"risk_assessment": result_dict, "judge_reasoning": f"Error: {exc}"}
 
 
 # ---------------------------------------------------------------------------
