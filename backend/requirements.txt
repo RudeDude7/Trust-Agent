@@ -138,3 +138,5 @@ langchain-experimental
 exa_py==1.8.6
 tavily-python
 wikipedia
+langgraph-checkpoint-postgres
+psycopg[binary]

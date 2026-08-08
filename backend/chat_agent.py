@@ -1,13 +1,17 @@
 """
 chat_agent.py — Conversational RAG Agent for Vendor Due Diligence
 
-This agent uses LangGraph with MemorySaver for maintaining conversation state.
-It answers user follow-ups based on the initial compliance analysis context and
-has access to a similarity search tool to query Supabase for fresh policy chunks.
+This agent uses LangGraph with a persistent PostgreSQL checkpointer
+(backed by Supabase) for maintaining conversation state across restarts.
+It answers user follow-ups based on the initial compliance analysis context
+and has access to a similarity search tool to query Supabase for fresh
+policy chunks.
 """
 
-from typing import Annotated, List, Dict
+from typing import Annotated, Any, List, Dict
 import logging
+import os
+
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -16,7 +20,6 @@ from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AI
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from typing_extensions import TypedDict
-from typing import Any
 
 from comparator_agent import _retrieve_chunks
 
@@ -59,12 +62,39 @@ def _build_search_tool(user_id: str):
     return search_policy_documents
 
 
+def _build_checkpointer():
+    """
+    Creates a persistent PostgreSQL checkpointer if SUPABASE_DB_URL is set.
+    Falls back to in-memory MemorySaver for local dev without Postgres.
+    """
+    db_url = os.environ.get("SUPABASE_DB_URL")
+    if db_url:
+        try:
+            from psycopg_pool import ConnectionPool
+            from langgraph.checkpoint.postgres import PostgresSaver
+
+            pool = ConnectionPool(
+                conninfo=db_url,
+                min_size=1,
+                max_size=5,
+                kwargs={"autocommit": True, "prepare_threshold": 0},
+            )
+            checkpointer = PostgresSaver(pool)
+            checkpointer.setup()
+            log.info("Chat memory: PostgreSQL checkpointer ready (persistent across restarts).")
+            return checkpointer
+        except Exception as e:
+            log.warning("PostgreSQL checkpointer failed to initialize: %s. Falling back to MemorySaver.", e)
+            return MemorySaver()
+    else:
+        log.warning("SUPABASE_DB_URL not set. Using in-memory MemorySaver (state lost on restart).")
+        return MemorySaver()
+
+
 class ChatAgent:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
-        self.memory = MemorySaver()
-        # Graph and tools are now built per-session in invoke(),
-        # since each session needs a tool scoped to that user's ID.
+        self.checkpointer = _build_checkpointer()
         self._compiled_graphs: dict[str, Any] = {}
 
     def _get_or_build_graph(self, user_id: str):
@@ -75,10 +105,8 @@ class ChatAgent:
         if user_id in self._compiled_graphs:
             return self._compiled_graphs[user_id]
 
-        # Build a tool with user_id baked in — LLM cannot see or alter it
         search_tool = _build_search_tool(user_id)
         tools = [search_tool]
-
         llm_with_tools = self.llm.bind_tools(tools)
 
         def call_model(state: ChatState):
@@ -112,18 +140,21 @@ class ChatAgent:
         workflow.add_conditional_edges("agent", tools_condition)
         workflow.add_edge("tools", "agent")
 
-        compiled = workflow.compile(checkpointer=self.memory)
+        compiled = workflow.compile(checkpointer=self.checkpointer)
         self._compiled_graphs[user_id] = compiled
         return compiled
 
     def invoke(self, vendor_name: str, context: str, history: List[Dict[str, str]], user_msg: str, session_id: str, user_id: str) -> str:
         """
-        Invokes the stateful agent with user_id securely scoped via closure.
+        Invokes the stateful agent with persistent memory.
+        On first turn for a session, loads any prior history from Supabase
+        (backwards compatibility for sessions that predate the persistent checkpointer).
         """
         app = self._get_or_build_graph(user_id)
         config = {"configurable": {"thread_id": session_id}}
 
-        # Initialize memory from Supabase history if this is the first turn
+        # Warm up from Supabase history if this is the first turn for this thread
+        # in the checkpointer (handles old sessions + fresh Postgres with no prior state)
         current_state = app.get_state(config)
         if not current_state.values:
             log.info("Initializing LangGraph memory for session %s from Supabase history", session_id)

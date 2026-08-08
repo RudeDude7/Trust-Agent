@@ -20,6 +20,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 from risk_scoring import compute_overall_risk
 from state import VendorDueDiligenceState
+from sanitization import sanitize_osint_findings
 
 # Load API keys (e.g. GOOGLE_API_KEY)
 load_dotenv()
@@ -115,39 +116,6 @@ Data Gaps: {data_gaps}
 Return the corrected and verified Risk Assessment.""")
 ])
 
-
-# ---------------------------------------------------------------------------
-# Input Guardrails
-# ---------------------------------------------------------------------------
-def _sanitize_prompt_injection(findings: list[dict]) -> list[dict]:
-    """
-    Heuristic regex scanner to detect and strip potential indirect prompt injections
-    from web-scraped content before they reach the LLM.
-    """
-    safe_findings = []
-    
-    # Common jailbreak and prompt injection attack vectors
-    injection_patterns = [
-        r"ignore (all )?previous instructions",
-        r"system prompt",
-        r"you are now",
-        r"forget all",
-        r"bypass (the|all)? rules",
-        r"print out your",
-        r"disregard"
-    ]
-    pattern = re.compile("|".join(injection_patterns), re.IGNORECASE)
-    
-    for finding in findings:
-        text = str(finding.get("title", "")) + " " + str(finding.get("snippet", ""))
-        if pattern.search(text):
-            log.warning("🚨 PROMPT INJECTION DETECTED & BLOCKED in OSINT finding from %s", finding.get("source_url"))
-            continue
-        safe_findings.append(finding)
-        
-    return safe_findings
-
-
 # ---------------------------------------------------------------------------
 # LangGraph node function
 # ---------------------------------------------------------------------------
@@ -157,7 +125,7 @@ def judge_agent_node(state: VendorDueDiligenceState) -> dict:
     compliance_matrix = state.get("compliance_matrix", {})
 
     raw_osint = state.get("osint_findings", [])
-    osint_findings = _sanitize_prompt_injection(raw_osint) if raw_osint else []
+    osint_findings = sanitize_osint_findings(raw_osint) if raw_osint else []
 
     log.info("=" * 50)
     log.info("Judge Agent activated for vendor: %s", vendor)

@@ -287,10 +287,16 @@ def comparator_agent_node(state: VendorDueDiligenceState) -> dict:
         clause = doc.page_content
         source = doc.metadata.get("source", "Internal Policy")
         final_text = parent_text if parent_text and not is_orphan else clause
-        internal_docs.append(final_text)
+
+        # Sanitize before it reaches any LLM prompt
+        clean_text = sanitize_text(final_text, source_label=source)
+        if not clean_text:
+            continue
+
+        internal_docs.append(clean_text)
         raw_rag_clauses.append({
             "clause_text": clause,
-            "parent_context": final_text,
+            "parent_context": clean_text,
             "role": "internal",
             "source": source
         })
@@ -300,10 +306,16 @@ def comparator_agent_node(state: VendorDueDiligenceState) -> dict:
         clause = doc.page_content
         source = doc.metadata.get("source", "Vendor Policy")
         final_text = parent_text if parent_text and not is_orphan else clause
-        vendor_docs.append(final_text)
+
+        # Sanitize before it reaches any LLM prompt
+        clean_text = sanitize_text(final_text, source_label=source)
+        if not clean_text:
+            continue
+
+        vendor_docs.append(clean_text)
         raw_rag_clauses.append({
             "clause_text": clause,
-            "parent_context": final_text,
+            "parent_context": clean_text,
             "role": "vendor",
             "source": source
         })
