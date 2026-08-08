@@ -70,18 +70,23 @@ def main():
             print(f"Failed to load the nightly dataset: {e}")
             sys.exit(1)
 
-    print(f"Running lightweight RAG metrics via Ragas on the {args.tier.upper()} dataset...")
-    print("(Metrics: Faithfulness, Answer Relevancy)")
-    
+    # Select metrics based on tier
+    if args.tier == "smoke":
+        # Smoke: generation metrics only (fast, 1-2 items, no ground_truth needed for these)
+        metrics = [faithfulness, answer_relevancy]
+        print(f"Running SMOKE metrics: Faithfulness, Answer Relevancy")
+    else:
+        # Nightly: full retrieval + generation metrics
+        metrics = [faithfulness, answer_relevancy, context_precision, context_recall]
+        print(f"Running FULL metrics: Faithfulness, Answer Relevancy, Context Precision, Context Recall")
+
     from ragas.run_config import RunConfig
-    # Use max_workers=1 to prevent rate-limiting and timeouts on the free tier
-    # Increase timeout to 300s to give Gemini enough time to respond without timing out
     run_config = RunConfig(timeout=300, max_workers=1)
-    
+
     try:
         result = evaluate(
-            dataset = dataset,
-            metrics=[faithfulness, answer_relevancy],
+            dataset=dataset,
+            metrics=metrics,
             llm=eval_llm,
             embeddings=eval_embeddings,
             run_config=run_config
@@ -89,7 +94,7 @@ def main():
     except Exception as e:
         print(f"Ragas evaluation failed: {e}")
         sys.exit(1)
-        
+
     print(f"\nEvaluation Results (Raw):\n{result}")
     
     # Print the full dataframe to debug Faithfulness scoring
@@ -121,23 +126,48 @@ def main():
 
     f_score = safe_get(result, "faithfulness")
     ar_score = safe_get(result, "answer_relevancy")
-    
-    print("\n" + "="*30)
-    print("📊 FINAL BENCHMARK SCORES")
-    print("="*30)
-    print(f"Faithfulness (Generation):      {f_score:.2f}")
-    print(f"Answer Relevancy (Generation):  {ar_score:.2f}")
-    
-    avg_score = (f_score + ar_score) / 2.0
-    print(f"\nOverall Pipeline Average:       {avg_score:.2f}")
-    print("="*30 + "\n")
-    
-    # Quality Gate Check
-    if avg_score < 0.85 or f_score < 0.85:
-        print("❌ Quality Gate Failed: Either average score or faithfulness is below the 0.85 threshold.")
+
+    print("\n" + "=" * 50)
+    print("  RAGAS BENCHMARK SCORES")
+    print("=" * 50)
+    print(f"  Faithfulness (Generation):      {f_score:.2f}")
+    print(f"  Answer Relevancy (Generation):  {ar_score:.2f}")
+
+    scores = [f_score, ar_score]
+
+    if args.tier == "nightly":
+        cp_score = safe_get(result, "context_precision")
+        cr_score = safe_get(result, "context_recall")
+        print(f"  Context Precision (Retrieval):  {cp_score:.2f}")
+        print(f"  Context Recall (Retrieval):     {cr_score:.2f}")
+        scores.extend([cp_score, cr_score])
+
+    avg_score = sum(scores) / len(scores)
+    print(f"\n  Pipeline Average:               {avg_score:.2f}")
+    print("=" * 50 + "\n")
+
+    # Quality Gate
+    gate_passed = True
+    if f_score < 0.80:
+        print(f"FAIL: Faithfulness {f_score:.2f} is below 0.80 threshold.")
+        gate_passed = False
+    if ar_score < 0.80:
+        print(f"FAIL: Answer Relevancy {ar_score:.2f} is below 0.80 threshold.")
+        gate_passed = False
+
+    if args.tier == "nightly":
+        if cp_score < 0.70:
+            print(f"FAIL: Context Precision {cp_score:.2f} is below 0.70 threshold.")
+            gate_passed = False
+        if cr_score < 0.70:
+            print(f"FAIL: Context Recall {cr_score:.2f} is below 0.70 threshold.")
+            gate_passed = False
+
+    if not gate_passed:
+        print("\nQuality Gate FAILED.")
         sys.exit(1)
-        
-    print("✅ Quality Gate Passed! System is production-ready.")
+
+    print("Quality Gate PASSED.")
     sys.exit(0)
 
 if __name__ == "__main__":

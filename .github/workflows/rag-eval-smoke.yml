@@ -27,8 +27,8 @@ jobs:
 
     - name: Run Tier 1 Smoke Test (Fast)
       env:
-        GOOGLE_API_KEY: ${{ secrets['GOOGLE_API_KEY'] }}
-        HUGGINGFACEHUB_API_TOKEN: ${{ secrets['HUGGINGFACEHUB_API_TOKEN'] }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        HUGGINGFACEHUB_API_TOKEN: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
         TOKENIZERS_PARALLELISM: false
       run: |
         cd backend
