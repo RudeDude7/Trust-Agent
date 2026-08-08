@@ -2,7 +2,7 @@
 chat_agent.py — Conversational RAG Agent for Vendor Due Diligence
 
 This agent uses LangGraph with MemorySaver for maintaining conversation state.
-It answers user follow-ups based on the initial compliance analysis context and 
+It answers user follow-ups based on the initial compliance analysis context and
 has access to a similarity search tool to query Supabase for fresh policy chunks.
 """
 
@@ -16,12 +16,13 @@ from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AI
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from typing_extensions import TypedDict
+from typing import Any
 
-# Import the retrieve function from comparator_agent
 from comparator_agent import _retrieve_chunks
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("chat_agent")
+
 
 class ChatState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -29,123 +30,124 @@ class ChatState(TypedDict):
     vendor_name: str
     user_id: str
 
-@tool
-def search_policy_documents(query: str, user_id: str) -> str:
+
+def _build_search_tool(user_id: str):
     """
-    Search the vendor and internal policy documents for specific terms or clauses.
-    Use this tool when the user asks a specific question about policies that is not 
-    covered by the initial context.
+    Creates a search tool with user_id baked into the closure.
+    The LLM only sees and controls the 'query' parameter —
+    user_id is injected server-side and invisible to the model.
     """
-    log.info(f"Targeted similarity search for: '{query}'")
-    results = _retrieve_chunks(query, user_id)
-    if not results:
-        return "No matching policy documents found."
-    
-    formatted_results = []
-    for doc, score in results[:5]:  # Top 5 most relevant
-        role = doc.metadata.get("role", "unknown")
-        formatted_results.append(f"[{role.upper()} POLICY - Score {score:.2f}]:\n{doc.page_content}")
-    
-    return "\n\n---\n\n".join(formatted_results)
+    @tool
+    def search_policy_documents(query: str) -> str:
+        """
+        Search the vendor and internal policy documents for specific terms or clauses.
+        Use this tool when the user asks a specific question about policies that is not
+        covered by the initial context.
+        """
+        log.info("Targeted similarity search for: '%s' (user: %s)", query, user_id)
+        results = _retrieve_chunks(query, user_id)
+        if not results:
+            return "No matching policy documents found."
+
+        formatted_results = []
+        for doc, score in results[:5]:
+            role = doc.metadata.get("role", "unknown")
+            formatted_results.append(f"[{role.upper()} POLICY - Score {score:.2f}]:\n{doc.page_content}")
+
+        return "\n\n---\n\n".join(formatted_results)
+
+    return search_policy_documents
+
 
 class ChatAgent:
     def __init__(self):
-        # Tools available to the agent
-        self.tools = [search_policy_documents]
-        
-        # LLM setup
         self.llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        
-        # Build the LangGraph State Machine
-        workflow = StateGraph(ChatState)
-        
-        # Define the nodes
-        workflow.add_node("agent", self._call_model)
-        workflow.add_node("tools", ToolNode(self.tools))
-        
-        # Define edges
-        workflow.add_edge(START, "agent")
-        workflow.add_conditional_edges(
-            "agent",
-            tools_condition,
-        )
-        workflow.add_edge("tools", "agent")
-        
-        # Compile with checkpointer
         self.memory = MemorySaver()
-        self.app = workflow.compile(checkpointer=self.memory)
+        # Graph and tools are now built per-session in invoke(),
+        # since each session needs a tool scoped to that user's ID.
+        self._compiled_graphs: dict[str, Any] = {}
 
-    def _call_model(self, state: ChatState):
-        messages = state["messages"]
-        vendor_name = state["vendor_name"]
-        context = state["context"]
-        
-        system_prompt = (
-            "You are the Trust Agent, an expert AI assistant focused exclusively on Vendor Due Diligence and Security Policy Analysis. "
-            f"You are currently discussing the vendor: {vendor_name}.\n\n"
-            "=== CONVERSATIONAL GUARDRAILS ===\n"
-            "1. GREETINGS: If the user greets you, politely greet them back and ask how you can help them analyze the vendor context.\n"
-            "2. OUT OF BOUNDS: If the user asks something completely unrelated to vendor due diligence, the provided context, or security policies, politely decline to answer and remind them of your purpose.\n"
-            "3. ACCURACY: Answer questions using the INITIAL CONTEXT below. If you need more specific details from the policies, use your search_policy_documents tool. If you still cannot find the answer, state clearly that you do not know based on the current data.\n"
-            "4. TOOL USAGE: When calling search_policy_documents, make sure to pass the 'user_id' parameter exactly as provided in the state if necessary, or just rely on the tool signature.\n\n"
-            "=== INITIAL CONTEXT (Findings & OSINT) ===\n"
-            f"{context}"
-        )
-        
-        # Prepend system message if not present
-        if not messages or not isinstance(messages[0], SystemMessage):
-            messages = [SystemMessage(content=system_prompt)] + messages
-        else:
-            # Update system message with latest context
-            messages[0] = SystemMessage(content=system_prompt)
-            
-        # The tool requires user_id. We can wrap the tool or just bind it, 
-        # but since LangChain passes kwargs, we can use an injected dependency 
-        # or bind the user_id dynamically. For simplicity, we'll let the LLM pass user_id,
-        # but to guarantee security, we should ideally inject it.
-        # However, passing it as a system prompt instruction works for this internal tool.
-        # We will append an instruction to always use this user_id:
-        user_id = state.get("user_id", "")
-        messages[0].content += f"\n\nCRITICAL: When using the search_policy_documents tool, ALWAYS pass '{user_id}' as the user_id argument."
+    def _get_or_build_graph(self, user_id: str):
+        """
+        Returns a compiled graph with the search tool scoped to this user_id.
+        Cached per user_id so repeated calls don't rebuild.
+        """
+        if user_id in self._compiled_graphs:
+            return self._compiled_graphs[user_id]
 
-        response = self.llm_with_tools.invoke(messages)
-        return {"messages": [response]}
+        # Build a tool with user_id baked in — LLM cannot see or alter it
+        search_tool = _build_search_tool(user_id)
+        tools = [search_tool]
+
+        llm_with_tools = self.llm.bind_tools(tools)
+
+        def call_model(state: ChatState):
+            messages = state["messages"]
+            vendor_name = state["vendor_name"]
+            context = state["context"]
+
+            system_prompt = (
+                "You are the Trust Agent, an expert AI assistant focused exclusively on Vendor Due Diligence and Security Policy Analysis. "
+                f"You are currently discussing the vendor: {vendor_name}.\n\n"
+                "=== CONVERSATIONAL GUARDRAILS ===\n"
+                "1. GREETINGS: If the user greets you, politely greet them back and ask how you can help them analyze the vendor context.\n"
+                "2. OUT OF BOUNDS: If the user asks something completely unrelated to vendor due diligence, the provided context, or security policies, politely decline to answer and remind them of your purpose.\n"
+                "3. ACCURACY: Answer questions using the INITIAL CONTEXT below. If you need more specific details from the policies, use your search_policy_documents tool. If you still cannot find the answer, state clearly that you do not know based on the current data.\n\n"
+                "=== INITIAL CONTEXT (Findings & OSINT) ===\n"
+                f"{context}"
+            )
+
+            if not messages or not isinstance(messages[0], SystemMessage):
+                messages = [SystemMessage(content=system_prompt)] + messages
+            else:
+                messages[0] = SystemMessage(content=system_prompt)
+
+            response = llm_with_tools.invoke(messages)
+            return {"messages": [response]}
+
+        workflow = StateGraph(ChatState)
+        workflow.add_node("agent", call_model)
+        workflow.add_node("tools", ToolNode(tools))
+        workflow.add_edge(START, "agent")
+        workflow.add_conditional_edges("agent", tools_condition)
+        workflow.add_edge("tools", "agent")
+
+        compiled = workflow.compile(checkpointer=self.memory)
+        self._compiled_graphs[user_id] = compiled
+        return compiled
 
     def invoke(self, vendor_name: str, context: str, history: List[Dict[str, str]], user_msg: str, session_id: str, user_id: str) -> str:
         """
-        Invokes the stateful agent. 
-        Note: history parameter is kept for backward compatibility if api.py still manages it, 
-        but LangGraph's checkpointer will naturally maintain state across invokes with the same session_id.
+        Invokes the stateful agent with user_id securely scoped via closure.
         """
+        app = self._get_or_build_graph(user_id)
         config = {"configurable": {"thread_id": session_id}}
-        
-        # If this is the first turn for this thread, we need to initialize the state
-        # with the history loaded from Supabase to seamlessly bridge the stateless/stateful gap.
-        current_state = self.app.get_state(config)
+
+        # Initialize memory from Supabase history if this is the first turn
+        current_state = app.get_state(config)
         if not current_state.values:
-            log.info(f"Initializing LangGraph memory for session {session_id} from Supabase history")
+            log.info("Initializing LangGraph memory for session %s from Supabase history", session_id)
             initial_messages = []
             for msg in history:
                 if msg["role"] == "user":
                     initial_messages.append(HumanMessage(content=msg["content"]))
                 else:
                     initial_messages.append(AIMessage(content=msg["content"]))
-            
-            # Update the state directly before invoking
+
             if initial_messages:
-                self.app.update_state(config, {"messages": initial_messages, "vendor_name": vendor_name, "context": context, "user_id": user_id})
-                
-        # Invoke the agent with the new user message
+                app.update_state(config, {
+                    "messages": initial_messages,
+                    "vendor_name": vendor_name,
+                    "context": context,
+                    "user_id": user_id
+                })
+
         input_state = {
             "messages": [HumanMessage(content=user_msg)],
             "vendor_name": vendor_name,
             "context": context,
             "user_id": user_id
         }
-        
-        result = self.app.invoke(input_state, config)
-        
-        # The final message is the agent's response
-        final_message = result["messages"][-1].content
-        return final_message
+
+        result = app.invoke(input_state, config)
+        return result["messages"][-1].content
