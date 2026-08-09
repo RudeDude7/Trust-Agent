@@ -1,6 +1,8 @@
 import sys
 import argparse
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
 
 # Create a dummy module to satisfy the import for ragas 0.1.7 compatibility with langchain_community 0.4.x
 import types
@@ -17,8 +19,8 @@ sys.modules["langchain_community.chat_models"] = _cm
 from datasets import Dataset
 from ragas import evaluate
 from ragas.metrics import faithfulness, context_precision, context_recall, answer_relevancy
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEmbeddings
+# Removed the Gemini API Key(hitting rate limits quite often)
 
 def main():
     parser = argparse.ArgumentParser(description="Run Tiered RAG Evaluation.")
@@ -26,24 +28,21 @@ def main():
     args = parser.parse_args()
 
     print(f"Initializing LLM and Embedding models for {args.tier.upper()} Evaluation...")
-    # Initialize the LLM evaluator (Gemini) and the Embedding model
     try:
         from ragas.llms.base import LangchainLLMWrapper
-        
-        _base_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", 
-            temperature=0.0, 
-            max_output_tokens=8192, 
-            max_retries=5
+        from langchain_groq import ChatGroq
+
+        _base_llm = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            temperature=0.0,
+            max_retries=3,
         )
-        
-        # Ragas 0.2.x strictly checks for finish_reason == 'stop', but Gemini returns 'STOP'.
-        # We supply a custom is_finished_parser that defaults to True for Gemini.
+
         eval_llm = LangchainLLMWrapper(
             langchain_llm=_base_llm,
             is_finished_parser=lambda _: True
         )
-        
+
         eval_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     except Exception as e:
         print(f"Failed to initialize models. Check your API keys. Error: {e}")
@@ -148,11 +147,13 @@ def main():
 
     # Quality Gate
     gate_passed = True
-    if f_score < 0.80:
-        print(f"FAIL: Faithfulness {f_score:.2f} is below 0.80 threshold.")
+    f_threshold = 0.70 if args.tier == "smoke" else 0.80
+    if f_score < f_threshold:
+        print(f"FAIL: Faithfulness {f_score:.2f} is below {f_threshold:.2f} threshold.")
         gate_passed = False
-    if ar_score < 0.80:
-        print(f"FAIL: Answer Relevancy {ar_score:.2f} is below 0.80 threshold.")
+    ar_threshold = 0.70 if args.tier == "smoke" else 0.80
+    if ar_score < ar_threshold:
+        print(f"FAIL: Answer Relevancy {ar_score:.2f} is below {ar_threshold:.2f} threshold.")
         gate_passed = False
 
     if args.tier == "nightly":

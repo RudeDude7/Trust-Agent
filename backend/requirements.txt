@@ -140,3 +140,4 @@ tavily-python
 wikipedia
 langgraph-checkpoint-postgres
 psycopg[binary]
+langchain-groq
