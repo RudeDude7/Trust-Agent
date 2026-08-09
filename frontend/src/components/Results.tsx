@@ -6,6 +6,7 @@ import { GapMatrix } from './GapMatrix';
 import { ExecutiveReport } from './ExecutiveReport';
 import { PolicySandbox } from './PolicySandbox';
 import clsx from 'clsx';
+import { SourceEvidence } from './SourceEvidence';
 
 interface ResultsProps {
   data: SavedAudit;
@@ -71,7 +72,7 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
 
   return (
     <div className="flex flex-col p-8 gap-8 text-stone-800 min-h-full max-w-6xl mx-auto w-full pb-32">
-      
+
       {/* Header Panel */}
       <div className={clsx(
         "rounded-3xl border p-8 shadow-soft",
@@ -96,14 +97,14 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
               {risk_assessment.overall_risk_level}
             </span>
             <span className="text-xs font-semibold text-stone-400 mt-2 mb-4 bg-stone-100 px-2 py-1 rounded-md">CONFIDENCE: {(risk_assessment.confidence_score * 100).toFixed(0)}%</span>
-            
+
             <button
               onClick={handleToggleWatch}
               disabled={isWatchLoading}
               className={clsx(
                 "text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-all border shadow-sm",
-                isWatching 
-                  ? "bg-accent-50 text-accent-700 border-accent-200 hover:bg-accent-100" 
+                isWatching
+                  ? "bg-accent-50 text-accent-700 border-accent-200 hover:bg-accent-100"
                   : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50 hover:text-stone-800",
                 isWatchLoading && "opacity-50 cursor-not-allowed"
               )}
@@ -126,59 +127,59 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
           </div>
         </div>
         <div className="md:col-span-1 flex flex-col h-full justify-start bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
-           <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2 mb-4">
-             Actionable Remediation
-           </h2>
-           <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6 flex-1 flex flex-col items-center justify-center text-center gap-5">
-              <div className="text-stone-500 text-sm">
-                Generate a professional email addressed to the vendor's security team requesting remediation.
-              </div>
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating || remediationDraft !== null}
-                className="w-full bg-stone-800 hover:bg-stone-900 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              >
-                {isGenerating ? <Loader className="animate-spin" size={18} /> : <Send size={18} />}
-                {isGenerating ? "Drafting..." : "Generate Request"}
-              </button>
-              
-              <div className="w-full h-px bg-stone-200 my-2"></div>
-              
-              <div className="text-stone-500 text-sm">
-                Download a clean, CISO-ready PDF executive briefing summarizing these findings.
-              </div>
-              <div className="w-full">
-                <ExecutiveReport data={data} />
-              </div>
-              
-              {generateError && <p className="text-red-500 text-xs mt-2">{generateError}</p>}
-           </div>
+          <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2 mb-4">
+            Actionable Remediation
+          </h2>
+          <div className="bg-stone-50 border border-stone-100 rounded-2xl p-6 flex-1 flex flex-col items-center justify-center text-center gap-5">
+            <div className="text-stone-500 text-sm">
+              Generate a professional email addressed to the vendor's security team requesting remediation.
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating || remediationDraft !== null}
+              className="w-full bg-stone-800 hover:bg-stone-900 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              {isGenerating ? <Loader className="animate-spin" size={18} /> : <Send size={18} />}
+              {isGenerating ? "Drafting..." : "Generate Request"}
+            </button>
+
+            <div className="w-full h-px bg-stone-200 my-2"></div>
+
+            <div className="text-stone-500 text-sm">
+              Download a clean, CISO-ready PDF executive briefing summarizing these findings.
+            </div>
+            <div className="w-full">
+              <ExecutiveReport data={data} />
+            </div>
+
+            {generateError && <p className="text-red-500 text-xs mt-2">{generateError}</p>}
+          </div>
         </div>
       </div>
 
       {/* Generated Draft View */}
       {remediationDraft && (
         <div className="bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
-           <div className="flex items-center justify-between mb-4">
-             <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2">
-                <FileText size={18} /> Remediation Email Draft
-             </h2>
-             <button onClick={handleCopy} className="text-xs bg-stone-100 hover:bg-stone-200 px-4 py-2 rounded-xl flex items-center gap-2 font-semibold text-stone-700 transition-colors shadow-sm">
-               {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-               {copied ? "Copied!" : "Copy to Clipboard"}
-             </button>
-           </div>
-           <textarea
-             readOnly
-             className="w-full h-64 bg-stone-50 border border-stone-200 rounded-2xl p-6 text-stone-700 focus:outline-none focus:border-accent-500 font-sans leading-relaxed resize-y"
-             value={remediationDraft}
-           />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-accent-600 uppercase tracking-widest flex items-center gap-2">
+              <FileText size={18} /> Remediation Email Draft
+            </h2>
+            <button onClick={handleCopy} className="text-xs bg-stone-100 hover:bg-stone-200 px-4 py-2 rounded-xl flex items-center gap-2 font-semibold text-stone-700 transition-colors shadow-sm">
+              {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+              {copied ? "Copied!" : "Copy to Clipboard"}
+            </button>
+          </div>
+          <textarea
+            readOnly
+            className="w-full h-64 bg-stone-50 border border-stone-200 rounded-2xl p-6 text-stone-700 focus:outline-none focus:border-accent-500 font-sans leading-relaxed resize-y"
+            value={remediationDraft}
+          />
         </div>
       )}
 
       {/* Bifurcated Inferences */}
       <div className="grid md:grid-cols-2 gap-8">
-        
+
         {/* OSINT Panel */}
         <div className="flex flex-col h-full bg-white border border-stone-200 rounded-3xl p-8 shadow-soft">
           <h2 className="text-sm font-semibold text-orange-500 uppercase tracking-widest flex items-center gap-2 mb-4">
@@ -197,6 +198,10 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
                 ))}
               </ul>
             )}
+            <SourceEvidence
+              variant="osint"
+              osintFindings={risk_assessment.raw_osint_findings}
+            />
           </div>
         </div>
 
@@ -218,6 +223,10 @@ export const Results: React.FC<ResultsProps> = ({ data }) => {
                 ))}
               </ul>
             )}
+            <SourceEvidence
+              variant="rag"
+              ragClauses={risk_assessment.raw_rag_clauses}
+            />
           </div>
         </div>
 
