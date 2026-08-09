@@ -181,4 +181,11 @@ class ChatAgent:
         }
 
         result = app.invoke(input_state, config)
-        return result["messages"][-1].content
+        content = result["messages"][-1].content
+        
+        if isinstance(content, list):
+            return " ".join(
+                block.get("text", "") for block in content 
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        return content
