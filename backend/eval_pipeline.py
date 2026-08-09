@@ -98,7 +98,6 @@ def main():
     
     # Print the full dataframe to debug Faithfulness scoring
     try:
-        import pandas as pd
         df = result.to_pandas()
         print("\n=== DEBUG: Full Evaluation DataFrame ===")
         for record in df.to_dict('records'):
