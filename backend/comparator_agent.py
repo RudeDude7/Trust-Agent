@@ -25,6 +25,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
 from sentence_transformers import CrossEncoder
+from sanitization import sanitize_text
 
 from state import VendorDueDiligenceState
 
